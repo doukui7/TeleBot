@@ -15,6 +15,7 @@ from stock_monitor import StockMonitor
 from tqbus_tracker import TqBusTracker
 from market_chart_generator import MarketChartGenerator
 from fear_greed_tracker import FearGreedTracker, NaverFinanceTracker
+from weekend_nasdaq_tracker import WeekendNasdaqTracker
 from market_holidays import (
     is_us_market_holiday, is_kr_market_holiday, is_both_markets_closed,
     get_us_holidays_in_month, get_kr_holidays_in_month,
@@ -53,6 +54,7 @@ class NewsScheduler:
         self.chart_generator = MarketChartGenerator()
         self.fear_greed_tracker = FearGreedTracker()
         self.naver_tracker = NaverFinanceTracker()
+        self.weekend_nasdaq_tracker = WeekendNasdaqTracker()
         self.last_published_urls = set()
         self.sent_yonhap_urls = set()  # 연합뉴스 실시간 알림용
         self.stock_alerted_today: dict = self._load_alert_history()  # 파일에서 로드

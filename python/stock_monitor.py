@@ -40,6 +40,11 @@ class StockMonitor:
         "BTC-USD": "비트코인 (Bitcoin)",
     }
 
+    # 환율
+    CURRENCIES = {
+        "KRW=X": "원/달러 환율",
+    }
+
     # S&P 100 종목 (5% 이상 변동 시 알림)
     US_TOP_STOCKS = {
         # Technology
@@ -553,5 +558,18 @@ class StockMonitor:
                     sign = "+" if change > 0 else ""
                     name = "TQQQ (나스닥 3배)" if symbol == "TQQQ" else "SOXL (반도체 3배)"
                     message += f"{emoji} {name}: ${current:,.2f} ({sign}{change:.2f}%)\n"
+            message += "\n"
+
+        # 원달러 환율
+        message += "<b>💱 환율</b>\n"
+        for symbol, name in self.CURRENCIES.items():
+            price_data = self.get_price_data(symbol)
+            if price_data:
+                current, previous = price_data
+                change = self.calculate_change_percent(current, previous)
+                # 환율 상승 = 원화 약세 (🔺빨강), 환율 하락 = 원화 강세 (🔻파랑)
+                emoji = "🔺" if change > 0 else "🔻"
+                sign = "+" if change > 0 else ""
+                message += f"{emoji} {name}: ₩{current:,.2f} ({sign}{change:.2f}%)\n"
 
         return message
