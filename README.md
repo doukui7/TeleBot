@@ -1,6 +1,8 @@
-# Quanters Telegram Bot
+# TeleBot
 
-독립적으로 운영되는 텔레그램 봇 서비스입니다.
+> GitHub: https://github.com/doukui7/TeleBot
+
+Quanters 독립 텔레그램 봇 서비스입니다.
 시장 브리핑, 가격 알림 등의 기능을 제공합니다.
 
 ---
@@ -8,7 +10,7 @@
 ## 📁 프로젝트 구조
 
 ```
-telegram-bot/
+TeleBot/
 ├── src/
 │   ├── config/
 │   │   └── supabase.ts      # Supabase 클라이언트 설정
@@ -32,7 +34,7 @@ telegram-bot/
 ### 1. 의존성 설치
 
 ```bash
-cd telegram-bot
+cd TeleBot
 npm install
 ```
 
@@ -125,7 +127,7 @@ import {
     generateBriefing,
     getTelegramUsers,
     sendAlert
-} from 'telegram-bot';
+} from 'telebot';
 
 // 단일 메시지 전송
 await sendMessage({
