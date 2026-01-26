@@ -23,13 +23,25 @@ logger = logging.getLogger(__name__)
 class NewsFetcher:
     """Google News RSS에서 뉴스를 가져오는 클래스"""
 
-    # 뉴스 피드 설정 (대시보드와 동일한 쿼리 사용)
+    # 뉴스 피드 설정 (경제 전문 위주)
     NEWS_FEEDS = {
+        'mk_stock': {
+            'title': '매경 증권',
+            'url_ko': 'https://www.mk.co.kr/rss/50200011/',
+            'url_en': None,
+            'limit': 3,
+        },
+        'mk_economy': {
+            'title': '매경 경제',
+            'url_ko': 'https://www.mk.co.kr/rss/30100041/',
+            'url_en': None,
+            'limit': 2,
+        },
         'yonhap': {
             'title': '연합뉴스',
             'url_ko': 'https://www.yna.co.kr/rss/news.xml',
             'url_en': None,
-            'limit': 10,  # 연합뉴스는 더 많이
+            'limit': 2,
         },
         'kr_stock': {
             'title': '국내 증시',
@@ -188,9 +200,17 @@ class NewsFetcher:
 
         return unique_articles
 
+    def _is_duplicate_global(self, title: str, seen_titles: List[str], threshold: float = 0.3) -> bool:
+        """전체 카테고리에서 중복인지 확인"""
+        for seen in seen_titles:
+            similarity = self._get_similarity(title, seen)
+            if similarity > threshold or title in seen or seen in title:
+                return True
+        return False
+
     def fetch_all_news(self, translate: bool = True) -> Dict[str, List[Dict]]:
         """
-        모든 카테고리의 뉴스 가져오기 (카테고리별 limit 설정 사용)
+        모든 카테고리의 뉴스 가져오기 (전체 카테고리 중복 제거)
 
         Args:
             translate: 영어 뉴스 번역 여부
@@ -199,6 +219,7 @@ class NewsFetcher:
             카테고리별 뉴스 딕셔너리
         """
         all_news = {}
+        seen_titles = []  # 전체 카테고리에서 본 제목들
 
         for category, config in self.NEWS_FEEDS.items():
             # 카테고리별 limit 사용 (기본값 3)
@@ -207,7 +228,7 @@ class NewsFetcher:
 
             # 한국어 뉴스 가져오기
             if config.get('url_ko'):
-                ko_articles = self.fetch_google_news_rss(config['url_ko'], limit=cat_limit * 2)
+                ko_articles = self.fetch_google_news_rss(config['url_ko'], limit=cat_limit * 3)
                 articles.extend(ko_articles)
 
             # 영어 뉴스 가져오기 (있는 경우)
@@ -227,13 +248,22 @@ class NewsFetcher:
 
                 articles.extend(en_articles)
 
-            # 중복 제거
+            # 카테고리 내 중복 제거
             articles = self._deduplicate_articles(articles)
 
-            # 카테고리별 limit 적용
-            all_news[category] = articles[:cat_limit]
+            # 전체 카테고리에서 중복 제거
+            unique_articles = []
+            for article in articles:
+                title = article.get('title', '')
+                if title and not self._is_duplicate_global(title, seen_titles):
+                    unique_articles.append(article)
+                    seen_titles.append(title)
 
-            logger.info(f"{config['title']}: {len(all_news[category])}개 기사")
+                if len(unique_articles) >= cat_limit:
+                    break
+
+            all_news[category] = unique_articles
+            logger.info(f"{config['title']}: {len(unique_articles)}개 기사 (중복 {len(articles) - len(unique_articles)}개 제거)")
 
         return all_news
 
@@ -252,6 +282,8 @@ class NewsFetcher:
         message += f"📅 {now}\n\n"
 
         category_emojis = {
+            'mk_stock': '📈',
+            'mk_economy': '💰',
             'yonhap': '📰',
             'kr_stock': '🇰🇷',
             'us_stock': '🇺🇸',
