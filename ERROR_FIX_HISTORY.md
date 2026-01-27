@@ -280,6 +280,37 @@ port = int(os.environ.get('PORT', 10000))
 
 **파일**: `python/fear_greed_tracker.py`
 
+### 3.3 중복 알림 발송 문제 (2026-01-28)
+
+**문제**: 같은 종목 알림이 반복 발송됨
+
+**원인 1**: Upstash Redis 환경변수명 불일치
+- Upstash 제공: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+- 코드에서 사용: `UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN`
+- Redis 연결 실패 → 인메모리 폴백 → Render 재시작 시 초기화
+
+**해결**:
+```python
+# config.py
+UPSTASH_REDIS_URL = os.getenv('UPSTASH_REDIS_REST_URL') or os.getenv('UPSTASH_REDIS_URL')
+UPSTASH_REDIS_TOKEN = os.getenv('UPSTASH_REDIS_REST_TOKEN') or os.getenv('UPSTASH_REDIS_TOKEN')
+```
+
+**원인 2**: 파일 저장 타이밍
+- 알림 기록이 마지막에 한 번만 파일에 저장됨
+- 중간에 오류 발생 시 기록 손실
+
+**해결**: 매 알림마다 즉시 파일 저장
+```python
+def _save_alert_record(self, symbol: str, level: int):
+    # ... 기존 코드 ...
+    # 즉시 파일에 저장 (Redis 미사용 시)
+    if not redis_client:
+        self._save_alert_history()
+```
+
+**파일**: `python/config.py`, `python/scheduler.py`
+
 ---
 
 ## 5. 주가 모니터링 관련
@@ -347,6 +378,7 @@ else:  # CLOSED/UNKNOWN
 
 | 날짜 | 섹션 | 변경 내용 |
 |------|------|----------|
+| 2026-01-28 | 3.3 | 중복 알림 문제 (Redis 변수명, 파일저장) 추가 |
 | 2026-01-28 | 2.4 | CNN Fear & Greed 동의 팝업 문제 추가 |
 | 2026-01-28 | 5.1 | 가격 변동률 계산 오류 (시간대별 분기) 추가 |
 | 2026-01-27 | 4.6 | Port Scan Timeout 오류 추가 |
