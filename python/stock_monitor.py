@@ -304,14 +304,25 @@ class StockMonitor:
             # 유효한 종가만 필터링
             valid_closes = [c for c in closes if c is not None]
 
-            # 현재가는 regularMarketPrice 사용 (실시간)
-            current_price = meta.get("regularMarketPrice")
-
-            # 전일종가는 종가 배열에서 마지막 두 번째 값 사용
-            if len(valid_closes) >= 2:
-                previous_close = valid_closes[-2]
+            # 전일 종가 = 마지막 종가 (closes[-1])
+            if valid_closes:
+                previous_close = valid_closes[-1]
             else:
-                previous_close = meta.get("chartPreviousClose") or meta.get("previousClose")
+                previous_close = meta.get("chartPreviousClose")
+
+            # 현재가: 프리마켓/애프터마켓 가격 우선
+            pre_market_price = meta.get("preMarketPrice")
+            post_market_price = meta.get("postMarketPrice")
+            regular_price = meta.get("regularMarketPrice")
+
+            if pre_market_price:
+                current_price = pre_market_price
+                logger.debug(f"{symbol}: 프리마켓 가격 사용 - {current_price}")
+            elif post_market_price:
+                current_price = post_market_price
+                logger.debug(f"{symbol}: 애프터마켓 가격 사용 - {current_price}")
+            else:
+                current_price = regular_price
 
             if current_price and previous_close:
                 logger.debug(f"{symbol}: 성공 - 현재가: {current_price}, 전일종가: {previous_close}")
