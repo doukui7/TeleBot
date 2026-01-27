@@ -30,6 +30,7 @@ class StockMonitor:
     # 지수 (1% 이상 변동 시 알림)
     INDICES = {
         "^KS11": "코스피 (KOSPI)",
+        "^KQ11": "코스닥 (KOSDAQ)",
         "^IXIC": "나스닥 (NASDAQ)",
         "^GSPC": "S&P 500",
         "NQ=F": "나스닥 선물",
@@ -206,6 +207,30 @@ class StockMonitor:
             logger.error(f"코스피 네이버 API 오류: {e}")
             return None
 
+    def get_kosdaq_realtime(self) -> Optional[Tuple[float, float]]:
+        """네이버 금융 API로 코스닥 실시간 데이터 가져오기"""
+        try:
+            url = 'https://m.stock.naver.com/api/index/KOSDAQ/basic'
+            response = requests.get(url, headers=self._headers, timeout=10)
+
+            if response.status_code != 200:
+                logger.warning(f"코스닥: 네이버 API 오류 ({response.status_code})")
+                return None
+
+            data = response.json()
+            current_price = float(data.get('closePrice', '0').replace(',', ''))
+            change = float(data.get('compareToPreviousClosePrice', '0').replace(',', ''))
+            previous_close = current_price - change
+
+            if current_price and previous_close:
+                logger.debug(f"코스닥(네이버): 현재가 {current_price}, 전일종가 {previous_close}")
+                return (current_price, previous_close)
+
+            return None
+        except Exception as e:
+            logger.error(f"코스닥 네이버 API 오류: {e}")
+            return None
+
     def get_bitcoin_realtime(self) -> Optional[Tuple[float, float]]:
         """Binance API로 비트코인 실시간 데이터 가져오기"""
         try:
@@ -242,6 +267,10 @@ class StockMonitor:
         # 코스피는 네이버 실시간 데이터 사용
         if symbol == "^KS11":
             return self.get_kospi_realtime()
+
+        # 코스닥은 네이버 실시간 데이터 사용
+        if symbol == "^KQ11":
+            return self.get_kosdaq_realtime()
 
         # 비트코인은 Binance 실시간 데이터 사용
         if symbol == "BTC-USD":
@@ -390,14 +419,18 @@ class StockMonitor:
 
         logger.info(f"시장 상태 - 한국장: {'열림' if kr_market_open else '닫힘'}, 미국장: {'열림' if us_market_open else '닫힘'}")
 
-        # 코스피는 한국장 시간에만 체크
+        # 코스피/코스닥은 한국장 시간에만 체크
         if kr_market_open:
-            kospi_alerts = self.check_symbols({"^KS11": self.INDICES["^KS11"]}, 'index', self.INDEX_THRESHOLD)
-            all_alerts.extend(kospi_alerts)
+            kr_indices = {
+                "^KS11": self.INDICES["^KS11"],
+                "^KQ11": self.INDICES["^KQ11"],
+            }
+            kr_alerts = self.check_symbols(kr_indices, 'index', self.INDEX_THRESHOLD)
+            all_alerts.extend(kr_alerts)
 
         # 미국 지수는 미국장 시간에만 체크
         if us_market_open:
-            us_indices = {k: v for k, v in self.INDICES.items() if k != "^KS11"}
+            us_indices = {k: v for k, v in self.INDICES.items() if k not in ("^KS11", "^KQ11")}
             all_alerts.extend(self.check_symbols(us_indices, 'index', self.INDEX_THRESHOLD))
 
             # 개별주 (10% 기준) - 미국장 시간에만
@@ -510,10 +543,10 @@ class StockMonitor:
         if not summary:
             return ""
 
-        # 미국장 마감: 코스피는 거래 전 (⏸️)
+        # 미국장 마감: 코스피/코스닥은 거래 전 (⏸️)
         # 한국장 마감: 나스닥, S&P는 거래 전 (⏸️)
         us_symbols = ["^IXIC", "^GSPC", "NQ=F"]  # 미국 지수
-        kr_symbols = ["^KS11"]  # 한국 지수
+        kr_symbols = ["^KS11", "^KQ11"]  # 한국 지수
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         message = f"📊 <b>시장 현황</b>\n"
