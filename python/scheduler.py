@@ -39,6 +39,9 @@ ALERT_COOLDOWN_SECONDS = 24 * 60 * 60
 # 알림 최소 간격 (초) - 30분
 MIN_ALERT_INTERVAL_SECONDS = 30 * 60
 
+# 브리핑 쿨다운 시간 (초) - 12시간 (하루 1회 보장)
+BRIEFING_COOLDOWN_SECONDS = 12 * 60 * 60
+
 
 class NewsScheduler:
     """주가 변동 알림 및 브리핑 스케줄러"""
@@ -131,6 +134,32 @@ class NewsScheduler:
         except Exception as e:
             logger.error(f"알림 기록 저장 실패: {e}")
 
+    def _check_briefing_sent(self, briefing_type: str) -> bool:
+        """브리핑이 이미 발송되었는지 확인 (Redis 기반)"""
+        key = f"briefing:{briefing_type}:{datetime.now().strftime('%Y-%m-%d')}"
+
+        if redis_client:
+            try:
+                exists = redis_client.exists(key)
+                if exists:
+                    logger.info(f"Redis: {briefing_type} 브리핑 이미 발송됨 (오늘)")
+                return bool(exists)
+            except Exception as e:
+                logger.error(f"Redis 조회 오류: {e}")
+
+        return False
+
+    def _mark_briefing_sent(self, briefing_type: str):
+        """브리핑 발송 기록 저장 (Redis 기반, 12시간 TTL)"""
+        key = f"briefing:{briefing_type}:{datetime.now().strftime('%Y-%m-%d')}"
+
+        if redis_client:
+            try:
+                redis_client.setex(key, BRIEFING_COOLDOWN_SECONDS, "1")
+                logger.info(f"Redis: {briefing_type} 브리핑 발송 기록 저장")
+            except Exception as e:
+                logger.error(f"Redis 저장 오류: {e}")
+
     def _get_threshold_level(self, change_percent: float, category: str) -> int:
         """
         변동률에 해당하는 임계값 레벨 반환
@@ -219,6 +248,11 @@ class NewsScheduler:
         - 미국 증시 스크린샷
         """
         try:
+            # 중복 발송 방지 (Redis)
+            if self._check_briefing_sent("morning"):
+                logger.info("오전 브리핑 스킵 (이미 발송됨)")
+                return
+
             logger.info("오전 브리핑 발송 시작...")
 
             # 1. Fear & Greed 스크린샷
@@ -247,6 +281,8 @@ class NewsScheduler:
                     await self.bot.send_news(msg)
                     logger.info("미국 증시 텍스트 폴백 발송 완료")
 
+            # 발송 완료 기록 (Redis)
+            self._mark_briefing_sent("morning")
             logger.info("오전 브리핑 발송 완료")
 
         except Exception as e:
@@ -258,6 +294,11 @@ class NewsScheduler:
         - 한국 증시 스크린샷
         """
         try:
+            # 중복 발송 방지 (Redis)
+            if self._check_briefing_sent("afternoon"):
+                logger.info("오후 브리핑 스킵 (이미 발송됨)")
+                return
+
             logger.info("오후 브리핑 발송 시작...")
 
             # 한국 증시 스크린샷
@@ -268,6 +309,8 @@ class NewsScheduler:
             else:
                 logger.warning("한국 증시 스크린샷 캡처 실패")
 
+            # 발송 완료 기록 (Redis)
+            self._mark_briefing_sent("afternoon")
             logger.info("오후 브리핑 발송 완료")
 
         except Exception as e:
