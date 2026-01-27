@@ -77,8 +77,8 @@ async def main():
     logger.info(f"TELEGRAM_BOT_TOKEN: {'Set' if os.environ.get('TELEGRAM_BOT_TOKEN') else 'Not set'}")
     logger.info(f"CHANNEL_ID: {'Set' if os.environ.get('CHANNEL_ID') else 'Not set'}")
 
-    # 테스트 브리핑 발송 (시작 시 1회)
-    await send_test_briefing()
+    # 테스트 브리핑 비활성화 (Render 재시작마다 중복 발송 방지)
+    # await send_test_briefing()
 
     # 스케줄러 시작
     scheduler = await start_scheduler()
