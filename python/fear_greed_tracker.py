@@ -100,8 +100,18 @@ class FearGreedTracker:
                 await page.goto('https://edition.cnn.com/markets/fear-and-greed',
                               wait_until='networkidle', timeout=60000)
 
+                # 동의 버튼 클릭 (있으면)
+                try:
+                    agree_button = page.locator('button:has-text("Agree")')
+                    if await agree_button.is_visible(timeout=3000):
+                        await agree_button.click()
+                        logger.info("CNN 동의 버튼 클릭")
+                        await asyncio.sleep(2)
+                except Exception:
+                    pass  # 동의 버튼 없으면 무시
+
                 # 페이지 로딩 대기
-                await asyncio.sleep(8)
+                await asyncio.sleep(5)
 
                 # Fear & Greed 게이지 + 히스토리 영역 캡처
                 screenshot_bytes = await page.screenshot(
