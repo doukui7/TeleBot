@@ -98,9 +98,13 @@ class NewsScheduler:
             except Exception as e:
                 logger.error(f"Redis 저장 오류: {e}")
 
-        # 인메모리에도 저장 (폴백용)
+        # 인메모리에도 저장
         today = datetime.now().strftime("%Y-%m-%d")
         self.stock_alerted_today[symbol] = {"date": today, "level": level}
+
+        # 즉시 파일에 저장 (Redis 미사용 시)
+        if not redis_client:
+            self._save_alert_history()
 
     def _load_alert_history(self) -> dict:
         """알림 기록 로드 (인메모리 초기화용)"""
