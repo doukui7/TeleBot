@@ -34,6 +34,9 @@ ALERT_HISTORY_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'aler
 # 알림 쿨다운 시간 (초) - 24시간
 ALERT_COOLDOWN_SECONDS = 24 * 60 * 60
 
+# 알림 최소 간격 (초) - 30분
+MIN_ALERT_INTERVAL_SECONDS = 30 * 60
+
 
 class NewsScheduler:
     """주가 변동 알림 스케줄러 (브리핑/스크린샷 비활성화됨)"""
@@ -43,6 +46,7 @@ class NewsScheduler:
         self.bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, CHANNEL_ID)
         self.stock_monitor = StockMonitor()
         self.stock_alerted_today: dict = self._load_alert_history()
+        self.last_alert_time: datetime = None  # 마지막 알림 발송 시간
 
     def _get_alert_key(self, symbol: str, level: int) -> str:
         """Redis 키 생성: alert:{symbol}:{level}"""
@@ -177,6 +181,15 @@ class NewsScheduler:
                 logger.info("새로운 알림 없음 (24시간 내 중복 필터링)")
                 return
 
+            # 30분 최소 간격 체크
+            now = datetime.now()
+            if self.last_alert_time:
+                elapsed = (now - self.last_alert_time).total_seconds()
+                if elapsed < MIN_ALERT_INTERVAL_SECONDS:
+                    remaining = int((MIN_ALERT_INTERVAL_SECONDS - elapsed) / 60)
+                    logger.info(f"알림 발송 대기 중 (최소 간격 30분, {remaining}분 남음)")
+                    return
+
             # 파일 백업 저장 (Redis 미사용 시 폴백)
             self._save_alert_history()
 
@@ -187,6 +200,7 @@ class NewsScheduler:
                 success = await self.bot.send_news(message)
 
                 if success:
+                    self.last_alert_time = now  # 발송 시간 기록
                     logger.info(f"주가 변동 알림 발송 성공 ({len(new_alerts)}개 항목)")
                 else:
                     logger.error("주가 변동 알림 발송 실패")

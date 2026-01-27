@@ -100,57 +100,12 @@ class FearGreedTracker:
                 await page.goto('https://edition.cnn.com/markets/fear-and-greed',
                               wait_until='networkidle', timeout=60000)
 
-                # 동의 팝업 처리 (여러 방법 시도)
-                try:
-                    # 팝업 로딩 대기
-                    await asyncio.sleep(3)
-
-                    # 방법 1: 정확한 버튼 텍스트로 찾기
-                    agree_selectors = [
-                        'button:has-text("Agree")',
-                        'button:text-is("Agree")',
-                        '[data-testid="agree-button"]',
-                        '.cnn-consent button',
-                        'button.agree-button',
-                    ]
-
-                    clicked = False
-                    for selector in agree_selectors:
-                        try:
-                            btn = page.locator(selector).first
-                            if await btn.is_visible(timeout=1000):
-                                await btn.click()
-                                logger.info(f"CNN 동의 버튼 클릭 성공: {selector}")
-                                clicked = True
-                                break
-                        except:
-                            continue
-
-                    # 방법 2: JavaScript로 직접 클릭
-                    if not clicked:
-                        await page.evaluate('''() => {
-                            const buttons = document.querySelectorAll('button');
-                            for (const btn of buttons) {
-                                if (btn.textContent.trim() === 'Agree') {
-                                    btn.click();
-                                    return true;
-                                }
-                            }
-                            return false;
-                        }''')
-                        logger.info("CNN 동의 버튼 JavaScript로 클릭")
-
-                    await asyncio.sleep(2)
-                except Exception as e:
-                    logger.debug(f"동의 버튼 처리 중 오류 (무시): {e}")
-
                 # 페이지 로딩 대기
-                await asyncio.sleep(3)
+                await asyncio.sleep(5)
 
-                # Fear & Greed 게이지만 캡처 (팝업 영역 제외)
-                # 팝업이 오른쪽에 나타나므로 width를 560으로 제한
+                # Fear & Greed 게이지 + 히스토리 정보 캡처 (전체 영역)
                 screenshot_bytes = await page.screenshot(
-                    clip={'x': 20, 'y': 480, 'width': 560, 'height': 620}
+                    clip={'x': 20, 'y': 480, 'width': 1020, 'height': 620}
                 )
 
                 await browser.close()
@@ -251,12 +206,11 @@ class NaverFinanceTracker:
         return await self.capture_naver_us_market_screenshot()
 
     async def capture_naver_us_market_screenshot(self):
-        """네이버 증권 미국 시장 스크린샷 캡처 (stock.naver.com)"""
+        """네이버 증권 미국 시장 스크린샷 캡처"""
         try:
             from playwright.async_api import async_playwright
 
             async with async_playwright() as p:
-                # 클라우드 환경(Render)용 브라우저 설정
                 browser = await p.chromium.launch(
                     headless=True,
                     args=[
@@ -267,20 +221,19 @@ class NaverFinanceTracker:
                 )
 
                 context = await browser.new_context(
-                    viewport={'width': 1400, 'height': 900},
+                    viewport={'width': 1400, 'height': 1200},
                     user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 )
                 page = await context.new_page()
 
-                # 네이버 증권 미국 시장 URL
                 await page.goto('https://stock.naver.com/market/stock/usa',
                               wait_until='networkidle', timeout=60000)
 
                 await asyncio.sleep(5)
 
-                # 다우존스, 나스닥, S&P 500 영역만 캡처 (상단 탭 포함)
+                # 좌표 기반 캡처 (다우/나스닥/S&P 지수 영역)
                 screenshot_bytes = await page.screenshot(
-                    clip={'x': 150, 'y': 120, 'width': 880, 'height': 350}
+                    clip={'x': 128, 'y': 245, 'width': 920, 'height': 240}
                 )
 
                 await browser.close()
@@ -295,12 +248,11 @@ class NaverFinanceTracker:
             return None
 
     async def capture_naver_kr_market_screenshot(self):
-        """네이버 증권 한국 시장 스크린샷 캡처 (stock.naver.com)"""
+        """네이버 증권 한국 시장 스크린샷 캡처"""
         try:
             from playwright.async_api import async_playwright
 
             async with async_playwright() as p:
-                # 클라우드 환경(Render)용 브라우저 설정
                 browser = await p.chromium.launch(
                     headless=True,
                     args=[
@@ -311,20 +263,19 @@ class NaverFinanceTracker:
                 )
 
                 context = await browser.new_context(
-                    viewport={'width': 1400, 'height': 900},
+                    viewport={'width': 1400, 'height': 1200},
                     user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 )
                 page = await context.new_page()
 
-                # 네이버 증권 한국 시장 URL
                 await page.goto('https://stock.naver.com/market/stock/kr',
                               wait_until='networkidle', timeout=60000)
 
                 await asyncio.sleep(5)
 
-                # KOSPI, KOSDAQ 영역만 캡처 (우측 잘린 차트 제거)
+                # 좌표 기반 캡처 (코스피/코스닥 지수 영역)
                 screenshot_bytes = await page.screenshot(
-                    clip={'x': 150, 'y': 120, 'width': 780, 'height': 350}
+                    clip={'x': 128, 'y': 245, 'width': 850, 'height': 240}
                 )
 
                 await browser.close()
