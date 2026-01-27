@@ -55,5 +55,4 @@ if not TELEGRAM_BOT_TOKEN:
     raise ValueError("TELEGRAM_BOT_TOKEN이 설정되지 않았습니다")
 if not CHANNEL_ID:
     raise ValueError("CHANNEL_ID가 설정되지 않았습니다")
-if not NEWS_API_KEY:
-    raise ValueError("NEWS_API_KEY가 설정되지 않았습니다")
+# NEWS_API_KEY는 선택적 (Google News RSS 사용시 불필요)
