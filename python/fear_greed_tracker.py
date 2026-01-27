@@ -147,9 +147,10 @@ class FearGreedTracker:
                 # 페이지 로딩 대기
                 await asyncio.sleep(3)
 
-                # Fear & Greed 게이지 + 히스토리 영역 캡처
+                # Fear & Greed 게이지만 캡처 (팝업 영역 제외)
+                # 팝업이 오른쪽에 나타나므로 width를 560으로 제한
                 screenshot_bytes = await page.screenshot(
-                    clip={'x': 20, 'y': 480, 'width': 1020, 'height': 620}
+                    clip={'x': 20, 'y': 480, 'width': 560, 'height': 620}
                 )
 
                 await browser.close()
