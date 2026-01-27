@@ -6,6 +6,7 @@ import asyncio
 import logging
 import sys
 import os
+from aiohttp import web
 
 # python/ 폴더를 path에 추가
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'python'))
@@ -17,6 +18,11 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def health_check(request):
+    """Health check endpoint for Render"""
+    return web.Response(text="TeleBot is running!")
 
 
 async def send_test_briefing():
@@ -54,6 +60,14 @@ async def send_test_briefing():
     logger.info("테스트 브리핑 발송 완료!")
 
 
+async def start_scheduler():
+    """스케줄러 시작"""
+    from scheduler import NewsScheduler
+    scheduler = NewsScheduler()
+    scheduler.start()
+    return scheduler
+
+
 async def main():
     logger.info("=" * 50)
     logger.info("TeleBot 스케줄러 시작")
@@ -66,20 +80,32 @@ async def main():
     # 테스트 브리핑 발송 (시작 시 1회)
     await send_test_briefing()
 
-    # 스케줄러 import 및 실행
-    from scheduler import NewsScheduler
+    # 스케줄러 시작
+    scheduler = await start_scheduler()
 
-    scheduler = NewsScheduler()
-    scheduler.start()
+    # HTTP 서버 시작 (Render Web Service용)
+    app = web.Application()
+    app.router.add_get('/', health_check)
+    app.router.add_get('/health', health_check)
 
-    # 무한 루프로 스케줄러 유지
-    logger.info("스케줄러 실행 중... (Ctrl+C로 종료)")
+    port = int(os.environ.get('PORT', 10000))
+    logger.info(f"HTTP 서버 시작 (포트: {port})")
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+
+    logger.info("스케줄러 실행 중...")
+
+    # 무한 루프로 유지
     try:
         while True:
             await asyncio.sleep(60)
     except KeyboardInterrupt:
         logger.info("종료 신호 수신")
         scheduler.stop()
+        await runner.cleanup()
 
 
 if __name__ == "__main__":
