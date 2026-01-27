@@ -1,40 +1,34 @@
 """
-TeleBot Main Entry Point
-- Render에서 실행하는 메인 파일
+TeleBot - Minimal Test
+배포 테스트용 최소 코드
 """
 import asyncio
 import logging
 import sys
+import os
 
-# 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 
 logger = logging.getLogger(__name__)
 
-# Python 경로에 python 폴더 추가
-sys.path.insert(0, 'python')
-
-from scheduler import NewsScheduler
-
 
 async def main():
-    """메인 실행 함수"""
-    logger.info("TeleBot 스케줄러 시작...")
+    logger.info("=" * 50)
+    logger.info("TeleBot 배포 테스트 시작")
+    logger.info("=" * 50)
+    logger.info(f"Python: {sys.version}")
+    logger.info(f"TZ: {os.environ.get('TZ', 'Not set')}")
+    logger.info(f"TELEGRAM_BOT_TOKEN: {'Set' if os.environ.get('TELEGRAM_BOT_TOKEN') else 'Not set'}")
+    logger.info(f"CHANNEL_ID: {'Set' if os.environ.get('CHANNEL_ID') else 'Not set'}")
 
-    scheduler = NewsScheduler()
-    scheduler.start()
-
-    # 스케줄러가 계속 실행되도록 유지
-    try:
-        while True:
-            await asyncio.sleep(60)
-    except KeyboardInterrupt:
-        logger.info("종료 신호 수신")
-        scheduler.stop()
+    # 10초 대기 후 종료 (테스트용)
+    logger.info("10초 후 종료...")
+    await asyncio.sleep(10)
+    logger.info("테스트 완료!")
 
 
 if __name__ == "__main__":
