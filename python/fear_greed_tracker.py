@@ -100,18 +100,52 @@ class FearGreedTracker:
                 await page.goto('https://edition.cnn.com/markets/fear-and-greed',
                               wait_until='networkidle', timeout=60000)
 
-                # 동의 버튼 클릭 (있으면)
+                # 동의 팝업 처리 (여러 방법 시도)
                 try:
-                    agree_button = page.locator('button:has-text("Agree")')
-                    if await agree_button.is_visible(timeout=3000):
-                        await agree_button.click()
-                        logger.info("CNN 동의 버튼 클릭")
-                        await asyncio.sleep(2)
-                except Exception:
-                    pass  # 동의 버튼 없으면 무시
+                    # 팝업 로딩 대기
+                    await asyncio.sleep(3)
+
+                    # 방법 1: 정확한 버튼 텍스트로 찾기
+                    agree_selectors = [
+                        'button:has-text("Agree")',
+                        'button:text-is("Agree")',
+                        '[data-testid="agree-button"]',
+                        '.cnn-consent button',
+                        'button.agree-button',
+                    ]
+
+                    clicked = False
+                    for selector in agree_selectors:
+                        try:
+                            btn = page.locator(selector).first
+                            if await btn.is_visible(timeout=1000):
+                                await btn.click()
+                                logger.info(f"CNN 동의 버튼 클릭 성공: {selector}")
+                                clicked = True
+                                break
+                        except:
+                            continue
+
+                    # 방법 2: JavaScript로 직접 클릭
+                    if not clicked:
+                        await page.evaluate('''() => {
+                            const buttons = document.querySelectorAll('button');
+                            for (const btn of buttons) {
+                                if (btn.textContent.trim() === 'Agree') {
+                                    btn.click();
+                                    return true;
+                                }
+                            }
+                            return false;
+                        }''')
+                        logger.info("CNN 동의 버튼 JavaScript로 클릭")
+
+                    await asyncio.sleep(2)
+                except Exception as e:
+                    logger.debug(f"동의 버튼 처리 중 오류 (무시): {e}")
 
                 # 페이지 로딩 대기
-                await asyncio.sleep(5)
+                await asyncio.sleep(3)
 
                 # Fear & Greed 게이지 + 히스토리 영역 캡처
                 screenshot_bytes = await page.screenshot(
