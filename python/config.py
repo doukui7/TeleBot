@@ -18,8 +18,9 @@ NEWS_API_KEY = os.getenv('NEWS_API_KEY')
 NEWS_CATEGORY = os.getenv('NEWS_CATEGORY', 'business')
 
 # Upstash Redis 설정 (알림 기록 영구 저장용)
-UPSTASH_REDIS_URL = os.getenv('UPSTASH_REDIS_URL')
-UPSTASH_REDIS_TOKEN = os.getenv('UPSTASH_REDIS_TOKEN')
+# Upstash에서 제공하는 변수명: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+UPSTASH_REDIS_URL = os.getenv('UPSTASH_REDIS_REST_URL') or os.getenv('UPSTASH_REDIS_URL')
+UPSTASH_REDIS_TOKEN = os.getenv('UPSTASH_REDIS_REST_TOKEN') or os.getenv('UPSTASH_REDIS_TOKEN')
 
 # 업데이트 간격 (초)
 UPDATE_INTERVAL = int(os.getenv('UPDATE_INTERVAL', '3600'))
