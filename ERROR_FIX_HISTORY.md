@@ -10,6 +10,7 @@
 2. [스크린샷 캡처 관련](#2-스크린샷-캡처-관련)
 3. [스케줄러 관련](#3-스케줄러-관련)
 4. [Render 배포 관련](#4-render-배포-관련)
+5. [주가 모니터링 관련](#5-주가-모니터링-관련)
 
 ---
 
@@ -235,10 +236,72 @@ port = int(os.environ.get('PORT', 10000))
 
 ---
 
+## 5. 주가 모니터링 관련
+
+### 5.1 가격 변동률 계산 오류 (2026-01-28)
+
+**문제**: 5% 이상 변동 종목이 있는데 알림이 오지 않음
+
+**원인**: Yahoo Finance API의 closes 배열 해석 오류
+
+**상세 분석**:
+- `range=5d` 쿼리 시 closes 배열에 5일치 데이터 반환
+- **장중**: `closes[-1]`은 오늘 종가(실시간 업데이트중)
+- **프리/애프터**: `closes[-1]`은 어제 종가
+- 기존 코드: 모든 상황에서 `closes[-1]`을 전일 종가로 사용
+- 결과: 장중에 현재가와 전일종가가 같아서 변동률 0%
+
+**Yahoo Finance API 데이터 예시**:
+```python
+# range=5d 요청 시 (장중)
+closes = [
+    247.64,   # 01-21
+    248.35,   # 01-22
+    248.04,   # 01-23
+    255.41,   # 01-26 (어제)
+    259.65    # 01-28 (오늘 - 실시간)
+]
+# closes[-1] = 오늘 가격 (현재가와 동일)
+# closes[-2] = 어제 종가 (실제 전일종가)
+```
+
+**해결**: `marketState` 기반 시간대별 분기 처리
+
+```python
+market_state = meta.get("marketState")  # REGULAR, PRE, POST, CLOSED
+
+if market_state == "REGULAR":
+    # 장중: 현재가=regularMarketPrice, 전일종가=closes[-2]
+    current_price = regular_price
+    previous_close = valid_closes[-2]
+
+elif market_state == "PRE":
+    # 프리마켓: 현재가=preMarketPrice, 전일종가=closes[-1]
+    current_price = pre_market_price or regular_price
+    previous_close = valid_closes[-1]
+
+elif market_state == "POST":
+    # 애프터마켓: 현재가=postMarketPrice, 전일종가=closes[-1]
+    current_price = post_market_price or regular_price
+    previous_close = valid_closes[-1]
+
+else:  # CLOSED/UNKNOWN
+    # closes[-1]이 오늘 종가일 수 있으므로 closes[-2] 사용
+    current_price = regular_price
+    previous_close = valid_closes[-2]
+```
+
+**파일**: `python/stock_monitor.py` (get_price_data 메서드)
+
+**커밋**: `fix: 시간대별 가격 변동률 계산 로직 수정`
+
+---
+
 ## 변경 이력
 
 | 날짜 | 섹션 | 변경 내용 |
 |------|------|----------|
+| 2026-01-28 | 5.1 | 가격 변동률 계산 오류 (시간대별 분기) 추가 |
 | 2026-01-27 | 4.6 | Port Scan Timeout 오류 추가 |
 | 2026-01-27 | 4.3 | main.py 누락 오류 추가 |
 | 2026-01-27 | 4.4 | 배포 타임아웃 오류 추가 |

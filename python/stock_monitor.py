@@ -304,25 +304,41 @@ class StockMonitor:
             # 유효한 종가만 필터링
             valid_closes = [c for c in closes if c is not None]
 
-            # 전일 종가 = 마지막 종가 (closes[-1])
-            if valid_closes:
-                previous_close = valid_closes[-1]
-            else:
-                previous_close = meta.get("chartPreviousClose")
-
-            # 현재가: 프리마켓/애프터마켓 가격 우선
+            # 시장 상태 확인
+            market_state = meta.get("marketState", "UNKNOWN")
             pre_market_price = meta.get("preMarketPrice")
             post_market_price = meta.get("postMarketPrice")
             regular_price = meta.get("regularMarketPrice")
 
-            if pre_market_price:
-                current_price = pre_market_price
-                logger.debug(f"{symbol}: 프리마켓 가격 사용 - {current_price}")
-            elif post_market_price:
-                current_price = post_market_price
-                logger.debug(f"{symbol}: 애프터마켓 가격 사용 - {current_price}")
-            else:
+            # 시간대별 가격 계산
+            # - 장중(REGULAR): closes[-1]은 오늘 종가(실시간), closes[-2]가 전일 종가
+            # - 프리/애프터: closes[-1]이 전일 종가
+            if market_state == "REGULAR":
+                # 장중: 현재가=regularMarketPrice, 전일종가=closes[-2]
                 current_price = regular_price
+                if len(valid_closes) >= 2:
+                    previous_close = valid_closes[-2]
+                else:
+                    previous_close = meta.get("chartPreviousClose")
+                logger.debug(f"{symbol}: 장중 - 현재가: {current_price}, 전일종가: {previous_close}")
+            elif market_state == "PRE":
+                # 프리마켓: 현재가=preMarketPrice, 전일종가=closes[-1]
+                current_price = pre_market_price if pre_market_price else regular_price
+                previous_close = valid_closes[-1] if valid_closes else meta.get("chartPreviousClose")
+                logger.debug(f"{symbol}: 프리마켓 - 현재가: {current_price}, 전일종가: {previous_close}")
+            elif market_state == "POST":
+                # 애프터마켓: 현재가=postMarketPrice, 전일종가=closes[-1]
+                current_price = post_market_price if post_market_price else regular_price
+                previous_close = valid_closes[-1] if valid_closes else meta.get("chartPreviousClose")
+                logger.debug(f"{symbol}: 애프터마켓 - 현재가: {current_price}, 전일종가: {previous_close}")
+            else:
+                # CLOSED/UNKNOWN: 장중과 동일하게 처리 (closes[-1]이 오늘 종가일 수 있음)
+                current_price = regular_price
+                if len(valid_closes) >= 2:
+                    previous_close = valid_closes[-2]
+                else:
+                    previous_close = valid_closes[-1] if valid_closes else meta.get("chartPreviousClose")
+                logger.debug(f"{symbol}: {market_state} - 현재가: {current_price}, 전일종가: {previous_close}")
 
             if current_price and previous_close:
                 logger.debug(f"{symbol}: 성공 - 현재가: {current_price}, 전일종가: {previous_close}")
