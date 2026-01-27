@@ -131,13 +131,92 @@ if not is_us_market_holiday():
 buildCommand: pip install -r requirements.txt && playwright install chromium --with-deps
 ```
 
+### 4.3 main.py 누락 오류 (2026-01-27)
+
+**에러**:
+```
+python: can't open file '/opt/render/project/src/main.py': [Errno 2] No such file or directory
+Exited with status 2
+```
+
+**원인**:
+- Render 대시보드에서 Start Command가 `python main.py`로 설정됨
+- 하지만 프로젝트에 `main.py` 파일이 없었음
+- `render.yaml`의 `startCommand: python python/scheduler.py`가 무시됨
+
+**해결**:
+- `main.py` 엔트리포인트 파일 생성 (커밋 `81509b9`)
+- `render.yaml`도 `startCommand: python main.py`로 수정
+
+### 4.4 배포 타임아웃 오류 (2026-01-27)
+
+**에러**:
+```
+Deploy failed - Timed out
+January 27, 2026 at 3:05 PM
+```
+
+**원인**:
+1. Playwright 브라우저 설치 (`playwright install chromium`) 시간 초과
+2. Render 무료 티어의 빌드 시간 제한
+3. 무거운 의존성: numpy, pandas, matplotlib, playwright
+
+**현재 설정**:
+```yaml
+# render.yaml
+services:
+  - type: worker
+    name: telebot-scheduler
+    env: python
+    buildCommand: pip install -r requirements.txt && playwright install chromium
+    startCommand: python main.py
+```
+
+**Render 대시보드 설정 (확인 필요)**:
+- Service Type: WEB SERVICE (❌ worker여야 함)
+- Build Command: ?
+- Start Command: python main.py
+
+**가능한 해결책**:
+
+1. **Docker 이미지 사용** (권장)
+   - `mcr.microsoft.com/playwright/python:v1.40.0-focal` 사용
+   - Playwright가 미리 설치된 이미지
+
+2. **Playwright 제거하고 텍스트만 사용**
+   - 스크린샷 기능 제거
+   - API 기반 텍스트 메시지만 발송
+
+3. **Render 유료 티어로 업그레이드**
+   - 빌드 시간 제한 없음
+
+4. **다른 플랫폼 사용**
+   - Railway, Fly.io, DigitalOcean 등
+
+### 4.5 Service Type 불일치 (2026-01-27)
+
+**문제**:
+- `render.yaml`: `type: worker`
+- Render 대시보드: WEB SERVICE
+
+**영향**:
+- render.yaml 설정이 무시될 수 있음
+- WEB SERVICE는 HTTP 요청을 기대하지만, 스케줄러는 백그라운드 워커
+
+**해결**:
+- Render 대시보드에서 새 서비스를 **Background Worker**로 생성
+- 또는 기존 서비스 삭제 후 render.yaml로 재생성
+
 ---
 
 ## 변경 이력
 
 | 날짜 | 섹션 | 변경 내용 |
 |------|------|----------|
-| 2025-01-26 | 전체 | 초기 문서 생성 |
+| 2026-01-27 | 4.3 | main.py 누락 오류 추가 |
+| 2026-01-27 | 4.4 | 배포 타임아웃 오류 추가 |
+| 2026-01-27 | 4.5 | Service Type 불일치 추가 |
+| 2026-01-26 | 전체 | 초기 문서 생성 |
 
 ---
 
