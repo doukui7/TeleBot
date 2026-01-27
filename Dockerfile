@@ -1,7 +1,7 @@
 # TeleBot Dockerfile
 # Playwright가 미리 설치된 이미지 사용
 
-FROM mcr.microsoft.com/playwright/python:v1.40.0-focal
+FROM mcr.microsoft.com/playwright/python:v1.48.0-focal
 
 WORKDIR /app
 
