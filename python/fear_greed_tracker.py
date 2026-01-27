@@ -187,31 +187,67 @@ class NaverFinanceTracker:
         return msg
 
     async def capture_naver_world_screenshot(self):
-        """네이버 금융 세계 증시 페이지 스크린샷 캡처"""
+        """네이버 금융 세계 증시 페이지 스크린샷 캡처 (deprecated - use capture_naver_us_market_screenshot)"""
+        return await self.capture_naver_us_market_screenshot()
+
+    async def capture_naver_us_market_screenshot(self):
+        """네이버 증권 미국 시장 스크린샷 캡처 (stock.naver.com)"""
         try:
             from playwright.async_api import async_playwright
 
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True)
-                page = await browser.new_page(viewport={'width': 1100, 'height': 900})
+                page = await browser.new_page(viewport={'width': 1400, 'height': 900})
 
-                await page.goto('https://finance.naver.com/world/',
+                # 새로운 네이버 증권 미국 시장 URL
+                await page.goto('https://stock.naver.com/market/stock/usa',
                               wait_until='domcontentloaded', timeout=60000)
 
                 await asyncio.sleep(3)
 
-                # 세계 주요 증시 현황 섹션 캡처
+                # 다우존스, 나스닥, S&P 500 영역만 캡처 (상단 탭 포함)
                 screenshot_bytes = await page.screenshot(
-                    clip={'x': 70, 'y': 220, 'width': 960, 'height': 400}
+                    clip={'x': 150, 'y': 120, 'width': 880, 'height': 350}
                 )
 
                 await browser.close()
 
                 buf = BytesIO(screenshot_bytes)
                 buf.seek(0)
-                logger.info("네이버 세계 증시 스크린샷 캡처 완료")
+                logger.info("네이버 미국 증시 스크린샷 캡처 완료")
                 return buf
 
         except Exception as e:
-            logger.error(f"네이버 세계 증시 스크린샷 캡처 실패: {e}")
+            logger.error(f"네이버 미국 증시 스크린샷 캡처 실패: {e}")
+            return None
+
+    async def capture_naver_kr_market_screenshot(self):
+        """네이버 증권 한국 시장 스크린샷 캡처 (stock.naver.com)"""
+        try:
+            from playwright.async_api import async_playwright
+
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                page = await browser.new_page(viewport={'width': 1400, 'height': 900})
+
+                # 네이버 증권 한국 시장 URL
+                await page.goto('https://stock.naver.com/market/stock/kr',
+                              wait_until='domcontentloaded', timeout=60000)
+
+                await asyncio.sleep(3)
+
+                # KOSPI, KOSDAQ 영역만 캡처 (우측 잘린 차트 제거)
+                screenshot_bytes = await page.screenshot(
+                    clip={'x': 150, 'y': 120, 'width': 780, 'height': 350}
+                )
+
+                await browser.close()
+
+                buf = BytesIO(screenshot_bytes)
+                buf.seek(0)
+                logger.info("네이버 한국 증시 스크린샷 캡처 완료")
+                return buf
+
+        except Exception as e:
+            logger.error(f"네이버 한국 증시 스크린샷 캡처 실패: {e}")
             return None

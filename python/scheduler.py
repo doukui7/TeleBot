@@ -182,20 +182,60 @@ class NewsScheduler:
             logger.error(f"브리핑 발행 오류: {e}")
 
     async def publish_morning_briefing(self):
-        """오전 8시 브리핑 (미국장 마감 후)"""
+        """오전 8시 브리핑 (미국장 마감 후) - 공탐지수 + 미국 증시 캡처 포함"""
         # 미국장 휴장일이면 스킵
         if is_us_market_holiday():
             logger.info("오전 브리핑 스킵 (미국장 휴장일)")
             return
-        await self.publish_daily_briefing("us")
+
+        try:
+            logger.info("오전 브리핑 발행 시작 (미국장 마감)...")
+
+            # 1. CNN Fear & Greed Index 스크린샷 발송
+            fg_screenshot = await self.fear_greed_tracker.capture_fear_greed_screenshot()
+            if fg_screenshot:
+                await self.bot.send_photo_buffer(fg_screenshot, "😱 <b>Fear & Greed Index</b>")
+                logger.info("CNN Fear & Greed 스크린샷 발송 성공")
+            else:
+                logger.warning("CNN Fear & Greed 스크린샷 캡처 실패")
+
+            # 2. 네이버 미국 증시 스크린샷 발송
+            us_screenshot = await self.naver_tracker.capture_naver_us_market_screenshot()
+            if us_screenshot:
+                await self.bot.send_photo_buffer(us_screenshot, "🇺🇸 <b>미국 증시 마감</b>")
+                logger.info("네이버 미국 증시 스크린샷 발송 성공")
+            else:
+                logger.warning("네이버 미국 증시 스크린샷 캡처 실패")
+
+            # 3. 기존 브리핑 발행
+            await self.publish_daily_briefing("us")
+
+        except Exception as e:
+            logger.error(f"오전 브리핑 발행 오류: {e}")
 
     async def publish_evening_briefing(self):
-        """오후 5시 브리핑 (한국장 마감 후)"""
+        """오후 5시 브리핑 (한국장 마감 후) - 한국 증시 캡처 포함"""
         # 한국장 휴장일이면 스킵
         if is_kr_market_holiday():
             logger.info("오후 브리핑 스킵 (한국장 휴장일)")
             return
-        await self.publish_daily_briefing("kr")
+
+        try:
+            logger.info("오후 브리핑 발행 시작 (한국장 마감)...")
+
+            # 1. 네이버 한국 증시 스크린샷 발송
+            kr_screenshot = await self.naver_tracker.capture_naver_kr_market_screenshot()
+            if kr_screenshot:
+                await self.bot.send_photo_buffer(kr_screenshot, "🇰🇷 <b>한국 증시 마감</b>")
+                logger.info("네이버 한국 증시 스크린샷 발송 성공")
+            else:
+                logger.warning("네이버 한국 증시 스크린샷 캡처 실패")
+
+            # 2. 기존 브리핑 발행
+            await self.publish_daily_briefing("kr")
+
+        except Exception as e:
+            logger.error(f"오후 브리핑 발행 오류: {e}")
 
     async def publish_premarket_briefing(self):
         """오전 7시 프리마켓 브리핑 (공탐지수 + 미국 증시) - 스크린샷 방식"""
@@ -585,18 +625,7 @@ class NewsScheduler:
         try:
             logger.info("스케줄러 시작...")
 
-            # 오전 7시 프리마켓 브리핑 (공탐지수 + 미국 증시)
-            self.scheduler.add_job(
-                self.publish_premarket_briefing,
-                'cron',
-                hour=7,
-                minute=0,
-                id='premarket_briefing',
-                name='프리마켓 브리핑 (공탐지수)',
-                replace_existing=True
-            )
-
-            # 오전 8시 브리핑 (미국장 마감 후)
+            # 오전 8시 브리핑 (미국장 마감 후) - 공탐지수 + 미국 증시 캡처 포함
             self.scheduler.add_job(
                 self.publish_morning_briefing,
                 'cron',
@@ -712,9 +741,8 @@ class NewsScheduler:
 
             self.scheduler.start()
             logger.info("스케줄러 시작 완료")
-            logger.info("  - 오전 7:00 프리마켓 브리핑 (공탐지수 + 미국 증시)")
-            logger.info("  - 오전 8:00 브리핑 (미국장 마감 후)")
-            logger.info("  - 오후 5:00 브리핑 (한국장 마감 후)")
+            logger.info("  - 오전 8:00 브리핑 (미국장 마감 + 공탐지수 + 미국 증시 캡처)")
+            logger.info("  - 오후 5:00 브리핑 (한국장 마감 + 한국 증시 캡처)")
             logger.info(f"  - 주가 변동 알림 ({STOCK_CHECK_INTERVAL}초 간격)")
             logger.info("  - TQ버스 상태 리포트 (오전 8:05)")
             logger.info("  - TQ버스 승하차 준비 알림 (1시간마다, 7% 이내시)")
