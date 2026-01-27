@@ -42,6 +42,9 @@ MIN_ALERT_INTERVAL_SECONDS = 30 * 60
 # 브리핑 쿨다운 시간 (초) - 12시간 (하루 1회 보장)
 BRIEFING_COOLDOWN_SECONDS = 12 * 60 * 60
 
+# 마지막 알림 발송 시간 Redis 키
+LAST_ALERT_TIME_KEY = "last_alert_time"
+
 
 class NewsScheduler:
     """주가 변동 알림 및 브리핑 스케줄러"""
@@ -160,6 +163,28 @@ class NewsScheduler:
             except Exception as e:
                 logger.error(f"Redis 저장 오류: {e}")
 
+    def _get_last_alert_time(self) -> datetime | None:
+        """마지막 알림 발송 시간 조회 (Redis 기반)"""
+        if redis_client:
+            try:
+                timestamp = redis_client.get(LAST_ALERT_TIME_KEY)
+                if timestamp:
+                    return datetime.fromisoformat(timestamp)
+            except Exception as e:
+                logger.error(f"Redis 조회 오류 (last_alert_time): {e}")
+        return self.last_alert_time  # 폴백: 메모리
+
+    def _set_last_alert_time(self, dt: datetime):
+        """마지막 알림 발송 시간 저장 (Redis 기반, 1시간 TTL)"""
+        self.last_alert_time = dt  # 메모리에도 저장
+        if redis_client:
+            try:
+                # 1시간 TTL (30분 간격 체크에 충분)
+                redis_client.setex(LAST_ALERT_TIME_KEY, 3600, dt.isoformat())
+                logger.info(f"Redis: 마지막 알림 시간 저장 ({dt.strftime('%H:%M:%S')})")
+            except Exception as e:
+                logger.error(f"Redis 저장 오류 (last_alert_time): {e}")
+
     def _get_threshold_level(self, change_percent: float, category: str) -> int:
         """
         변동률에 해당하는 임계값 레벨 반환
@@ -214,10 +239,11 @@ class NewsScheduler:
                 logger.info("새로운 알림 없음 (24시간 내 중복 필터링)")
                 return
 
-            # 30분 최소 간격 체크
+            # 30분 최소 간격 체크 (Redis 기반)
             now = datetime.now()
-            if self.last_alert_time:
-                elapsed = (now - self.last_alert_time).total_seconds()
+            last_time = self._get_last_alert_time()
+            if last_time:
+                elapsed = (now - last_time).total_seconds()
                 if elapsed < MIN_ALERT_INTERVAL_SECONDS:
                     remaining = int((MIN_ALERT_INTERVAL_SECONDS - elapsed) / 60)
                     logger.info(f"알림 발송 대기 중 (최소 간격 30분, {remaining}분 남음)")
@@ -233,7 +259,7 @@ class NewsScheduler:
                 success = await self.bot.send_news(message)
 
                 if success:
-                    self.last_alert_time = now  # 발송 시간 기록
+                    self._set_last_alert_time(now)  # 발송 시간 기록 (Redis)
                     logger.info(f"주가 변동 알림 발송 성공 ({len(new_alerts)}개 항목)")
                 else:
                     logger.error("주가 변동 알림 발송 실패")
