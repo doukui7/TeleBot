@@ -186,7 +186,7 @@ class NewsScheduler:
             logger.error(f"브리핑 발행 오류: {e}")
 
     async def publish_morning_briefing(self):
-        """오전 8시 브리핑 (미국장 마감 후) - 공탐지수 + 미국 증시 캡처 포함"""
+        """오전 8시 브리핑 (미국장 마감 후) - 스크린샷 비활성화"""
         # 미국장 휴장일이면 스킵
         if is_us_market_holiday():
             logger.info("오전 브리핑 스킵 (미국장 휴장일)")
@@ -195,30 +195,18 @@ class NewsScheduler:
         try:
             logger.info("오전 브리핑 발행 시작 (미국장 마감)...")
 
-            # 1. CNN Fear & Greed Index 스크린샷 발송
-            fg_screenshot = await self.fear_greed_tracker.capture_fear_greed_screenshot()
-            if fg_screenshot:
-                await self.bot.send_photo_buffer(fg_screenshot, "😱 <b>Fear & Greed Index</b>")
-                logger.info("CNN Fear & Greed 스크린샷 발송 성공")
-            else:
-                logger.warning("CNN Fear & Greed 스크린샷 캡처 실패")
+            # 스크린샷 발송 비활성화 (2026-01-28)
+            # fg_screenshot = await self.fear_greed_tracker.capture_fear_greed_screenshot()
+            # us_screenshot = await self.naver_tracker.capture_naver_us_market_screenshot()
 
-            # 2. 네이버 미국 증시 스크린샷 발송
-            us_screenshot = await self.naver_tracker.capture_naver_us_market_screenshot()
-            if us_screenshot:
-                await self.bot.send_photo_buffer(us_screenshot, "🇺🇸 <b>미국 증시 마감</b>")
-                logger.info("네이버 미국 증시 스크린샷 발송 성공")
-            else:
-                logger.warning("네이버 미국 증시 스크린샷 캡처 실패")
-
-            # 3. 기존 브리핑 발행
+            # 기존 브리핑만 발행
             await self.publish_daily_briefing("us")
 
         except Exception as e:
             logger.error(f"오전 브리핑 발행 오류: {e}")
 
     async def publish_evening_briefing(self):
-        """오후 5시 브리핑 (한국장 마감 후) - 한국 증시 캡처 포함"""
+        """오후 5시 브리핑 (한국장 마감 후) - 스크린샷 비활성화"""
         # 한국장 휴장일이면 스킵
         if is_kr_market_holiday():
             logger.info("오후 브리핑 스킵 (한국장 휴장일)")
@@ -227,50 +215,29 @@ class NewsScheduler:
         try:
             logger.info("오후 브리핑 발행 시작 (한국장 마감)...")
 
-            # 1. 네이버 한국 증시 스크린샷 발송
-            kr_screenshot = await self.naver_tracker.capture_naver_kr_market_screenshot()
-            if kr_screenshot:
-                await self.bot.send_photo_buffer(kr_screenshot, "🇰🇷 <b>한국 증시 마감</b>")
-                logger.info("네이버 한국 증시 스크린샷 발송 성공")
-            else:
-                logger.warning("네이버 한국 증시 스크린샷 캡처 실패")
+            # 스크린샷 발송 비활성화 (2026-01-28)
+            # kr_screenshot = await self.naver_tracker.capture_naver_kr_market_screenshot()
 
-            # 2. 기존 브리핑 발행
+            # 기존 브리핑만 발행
             await self.publish_daily_briefing("kr")
 
         except Exception as e:
             logger.error(f"오후 브리핑 발행 오류: {e}")
 
     async def publish_premarket_briefing(self):
-        """오전 7시 프리마켓 브리핑 (공탐지수 + 미국 증시) - 스크린샷 방식"""
+        """프리마켓 브리핑 - 스크린샷 비활성화"""
         # 미국장 휴장일이면 스킵
         if is_us_market_holiday():
             logger.info("프리마켓 브리핑 스킵 (미국장 휴장일)")
             return
 
         try:
-            logger.info("프리마켓 브리핑 발행 시작 (스크린샷 방식)...")
-
-            # 1. CNN Fear & Greed Index 스크린샷 발송
-            fg_screenshot = await self.fear_greed_tracker.capture_fear_greed_screenshot()
-            if fg_screenshot:
-                await self.bot.send_photo_buffer(fg_screenshot, "😱 <b>Fear & Greed Index</b>")
-                logger.info("CNN Fear & Greed 스크린샷 발송 성공")
-            else:
-                logger.warning("CNN Fear & Greed 스크린샷 캡처 실패")
-
-            # 2. 네이버 세계 증시 스크린샷 발송
-            naver_screenshot = await self.naver_tracker.capture_naver_world_screenshot()
-            if naver_screenshot:
-                await self.bot.send_photo_buffer(naver_screenshot, "🌍 <b>세계 증시 현황</b>")
-                logger.info("네이버 세계 증시 스크린샷 발송 성공")
-            else:
-                logger.warning("네이버 세계 증시 스크린샷 캡처 실패")
-
-            logger.info("프리마켓 브리핑 발행 완료")
+            logger.info("프리마켓 브리핑 - 스크린샷 비활성화됨 (2026-01-28)")
+            # 모든 스크린샷 발송 비활성화
+            pass
 
         except Exception as e:
-            logger.error(f"프리마켓 브리핑 발행 오류: {e}")
+            logger.error(f"프리마켓 브리핑 오류: {e}")
 
     async def publish_etf_report(self):
         """ETF 일일 리포트 발행"""
