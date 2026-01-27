@@ -1,9 +1,10 @@
 """
 자동 뉴스 발행, ETF 추적 및 주가 변동 알림 스케줄러
 
-⚠️ 2026-01-28: 모든 이미지/브리핑 발송 비활성화
-- 오전/오후 브리핑, 스크린샷, 차트 발송 중단
-- 주가 변동 알림만 유지
+기능:
+- 주가 변동 알림 (5분마다)
+- 오전 브리핑 (08:00 KST) - Fear & Greed + 미국 증시
+- 오후 브리핑 (15:30 KST) - 한국 증시
 """
 import logging
 import asyncio
@@ -15,6 +16,7 @@ from config import TELEGRAM_BOT_TOKEN, CHANNEL_ID, STOCK_CHECK_INTERVAL, UPSTASH
 from telegram_bot import NewsChannelBot
 from stock_monitor import StockMonitor
 from market_holidays import is_us_market_holiday
+from fear_greed_tracker import FearGreedTracker, NaverFinanceTracker
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +41,14 @@ MIN_ALERT_INTERVAL_SECONDS = 30 * 60
 
 
 class NewsScheduler:
-    """주가 변동 알림 스케줄러 (브리핑/스크린샷 비활성화됨)"""
+    """주가 변동 알림 및 브리핑 스케줄러"""
 
     def __init__(self):
         self.scheduler = AsyncIOScheduler()
         self.bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, CHANNEL_ID)
         self.stock_monitor = StockMonitor()
+        self.fear_greed_tracker = FearGreedTracker()
+        self.naver_tracker = NaverFinanceTracker()
         self.stock_alerted_today: dict = self._load_alert_history()
         self.last_alert_time: datetime = None  # 마지막 알림 발송 시간
 
@@ -208,10 +212,71 @@ class NewsScheduler:
         except Exception as e:
             logger.error(f"주가 변동 체크 오류: {e}")
 
-    def start(self):
-        """스케줄러 시작 (주가 변동 알림만)"""
+    async def send_morning_briefing(self):
+        """
+        오전 브리핑 발송 (08:00 KST)
+        - Fear & Greed 스크린샷
+        - 미국 증시 스크린샷
+        """
         try:
-            logger.info("스케줄러 시작 (주가 변동 알림만 활성화)...")
+            logger.info("오전 브리핑 발송 시작...")
+
+            # 1. Fear & Greed 스크린샷
+            fg_screenshot = await self.fear_greed_tracker.capture_fear_greed_screenshot()
+            if fg_screenshot:
+                await self.bot.send_photo_buffer(fg_screenshot, "🌅 <b>오전 브리핑</b> - Fear & Greed Index")
+                logger.info("Fear & Greed 스크린샷 발송 완료")
+            else:
+                # 스크린샷 실패 시 텍스트 폴백
+                fg_data = self.fear_greed_tracker.fetch_fear_greed_data()
+                if fg_data:
+                    msg = self.fear_greed_tracker.format_text_message(fg_data)
+                    await self.bot.send_news(msg)
+                    logger.info("Fear & Greed 텍스트 폴백 발송 완료")
+
+            # 2. 미국 증시 스크린샷
+            us_screenshot = await self.naver_tracker.capture_naver_us_market_screenshot()
+            if us_screenshot:
+                await self.bot.send_photo_buffer(us_screenshot, "📊 <b>미국 증시 현황</b>")
+                logger.info("미국 증시 스크린샷 발송 완료")
+            else:
+                # 스크린샷 실패 시 텍스트 폴백
+                us_data = self.naver_tracker.fetch_us_market_data()
+                if us_data:
+                    msg = self.naver_tracker.format_text_message(us_data)
+                    await self.bot.send_news(msg)
+                    logger.info("미국 증시 텍스트 폴백 발송 완료")
+
+            logger.info("오전 브리핑 발송 완료")
+
+        except Exception as e:
+            logger.error(f"오전 브리핑 발송 오류: {e}")
+
+    async def send_afternoon_briefing(self):
+        """
+        오후 브리핑 발송 (15:30 KST)
+        - 한국 증시 스크린샷
+        """
+        try:
+            logger.info("오후 브리핑 발송 시작...")
+
+            # 한국 증시 스크린샷
+            kr_screenshot = await self.naver_tracker.capture_naver_kr_market_screenshot()
+            if kr_screenshot:
+                await self.bot.send_photo_buffer(kr_screenshot, "🇰🇷 <b>오후 브리핑</b> - 한국 증시 마감")
+                logger.info("한국 증시 스크린샷 발송 완료")
+            else:
+                logger.warning("한국 증시 스크린샷 캡처 실패")
+
+            logger.info("오후 브리핑 발송 완료")
+
+        except Exception as e:
+            logger.error(f"오후 브리핑 발송 오류: {e}")
+
+    def start(self):
+        """스케줄러 시작"""
+        try:
+            logger.info("스케줄러 시작...")
 
             # 주가 변동 알림 체크 (주기적 - 5분마다)
             self.scheduler.add_job(
@@ -223,11 +288,35 @@ class NewsScheduler:
                 replace_existing=True
             )
 
+            # 오전 브리핑 (08:00 KST, 평일만)
+            self.scheduler.add_job(
+                self.send_morning_briefing,
+                'cron',
+                hour=8,
+                minute=0,
+                day_of_week='mon-fri',
+                id='morning_briefing',
+                name='오전 브리핑',
+                replace_existing=True
+            )
+
+            # 오후 브리핑 (15:30 KST, 평일만)
+            self.scheduler.add_job(
+                self.send_afternoon_briefing,
+                'cron',
+                hour=15,
+                minute=30,
+                day_of_week='mon-fri',
+                id='afternoon_briefing',
+                name='오후 브리핑',
+                replace_existing=True
+            )
+
             self.scheduler.start()
             logger.info("스케줄러 시작 완료")
             logger.info(f"  - 주가 변동 알림 ({STOCK_CHECK_INTERVAL}초 간격)")
-            logger.info("  - ⚠️ 오전/오후 브리핑 비활성화됨")
-            logger.info("  - ⚠️ 스크린샷/차트 발송 비활성화됨")
+            logger.info("  - 오전 브리핑 (08:00 KST, 평일)")
+            logger.info("  - 오후 브리핑 (15:30 KST, 평일)")
 
         except Exception as e:
             logger.error(f"스케줄러 시작 오류: {e}")
