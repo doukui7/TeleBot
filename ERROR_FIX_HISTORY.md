@@ -234,6 +234,52 @@ app.router.add_get('/', health_check)
 port = int(os.environ.get('PORT', 10000))
 ```
 
+### 2.4 CNN Fear & Greed 동의 팝업 (2026-01-28)
+
+**문제**: CNN 페이지에 "Legal Terms and Privacy" 동의 팝업이 스크린샷을 가림
+
+**시도한 방법들**:
+
+1. **Playwright 버튼 클릭** (실패)
+   ```python
+   agree_button = page.locator('button:has-text("Agree")')
+   if await agree_button.is_visible(timeout=3000):
+       await agree_button.click()
+   ```
+   - 버튼을 찾지 못함
+
+2. **다양한 selector 시도** (실패)
+   ```python
+   selectors = [
+       'button:has-text("Agree")',
+       'button:text-is("Agree")',
+       '[data-testid="agree-button"]',
+       '.cnn-consent button',
+   ]
+   ```
+
+3. **JavaScript 직접 클릭** (실패)
+   ```javascript
+   const buttons = document.querySelectorAll('button');
+   for (const btn of buttons) {
+       if (btn.textContent.trim() === 'Agree') {
+           btn.click();
+       }
+   }
+   ```
+
+4. **캡처 영역 축소** (적용중)
+   - width: 1020 → 560으로 축소
+   - 오른쪽 팝업 영역 제외하고 게이지만 캡처
+   - 히스토리 정보(Previous close, 1 week ago 등)는 잘림
+
+**추가 시도 필요**:
+- iframe 내부 버튼일 가능성 확인
+- 쿠키 설정으로 팝업 우회
+- Puppeteer 스크립트로 테스트
+
+**파일**: `python/fear_greed_tracker.py`
+
 ---
 
 ## 5. 주가 모니터링 관련
@@ -301,6 +347,7 @@ else:  # CLOSED/UNKNOWN
 
 | 날짜 | 섹션 | 변경 내용 |
 |------|------|----------|
+| 2026-01-28 | 2.4 | CNN Fear & Greed 동의 팝업 문제 추가 |
 | 2026-01-28 | 5.1 | 가격 변동률 계산 오류 (시간대별 분기) 추가 |
 | 2026-01-27 | 4.6 | Port Scan Timeout 오류 추가 |
 | 2026-01-27 | 4.3 | main.py 누락 오류 추가 |
