@@ -231,9 +231,7 @@ class NewsScheduler:
                     continue
 
                 new_alerts.append(alert)
-                # 알림 기록 저장 (Redis: 24시간 TTL)
-                self._save_alert_record(alert.symbol, current_level)
-                logger.info(f"알림 대상: {alert.symbol} ({alert.change_percent:+.2f}%, 레벨 {current_level})")
+                logger.info(f"알림 후보: {alert.symbol} ({alert.change_percent:+.2f}%, 레벨 {current_level})")
 
             if not new_alerts:
                 logger.info("새로운 알림 없음 (24시간 내 중복 필터링)")
@@ -252,15 +250,29 @@ class NewsScheduler:
             # 파일 백업 저장 (Redis 미사용 시 폴백)
             self._save_alert_history()
 
+            # 발송 직전 이중 체크 (Render 동시 실행 방지)
+            final_alerts = []
+            for alert in new_alerts:
+                current_level = self._get_threshold_level(alert.change_percent, alert.category)
+                if not self._check_alert_exists(alert.symbol, current_level):
+                    final_alerts.append(alert)
+                    self._save_alert_record(alert.symbol, current_level)  # 즉시 저장
+                else:
+                    logger.info(f"이중 체크 스킵: {alert.symbol} 레벨 {current_level}")
+
+            if not final_alerts:
+                logger.info("발송 직전 이중 체크: 모든 알림 이미 발송됨")
+                return
+
             # 알림 메시지 생성 및 전송
-            message = self.stock_monitor.format_alert_message(new_alerts)
+            message = self.stock_monitor.format_alert_message(final_alerts)
 
             if message:
                 success = await self.bot.send_news(message)
 
                 if success:
                     self._set_last_alert_time(now)  # 발송 시간 기록 (Redis)
-                    logger.info(f"주가 변동 알림 발송 성공 ({len(new_alerts)}개 항목)")
+                    logger.info(f"주가 변동 알림 발송 성공 ({len(final_alerts)}개 항목)")
                 else:
                     logger.error("주가 변동 알림 발송 실패")
 
