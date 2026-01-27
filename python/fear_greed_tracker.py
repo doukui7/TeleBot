@@ -80,13 +80,28 @@ class FearGreedTracker:
             from playwright.async_api import async_playwright
 
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                page = await browser.new_page(viewport={'width': 1400, 'height': 1200})
+                # 클라우드 환경(Render)용 브라우저 설정
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-blink-features=AutomationControlled',
+                    ]
+                )
+
+                context = await browser.new_context(
+                    viewport={'width': 1400, 'height': 1200},
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                )
+                page = await context.new_page()
 
                 await page.goto('https://edition.cnn.com/markets/fear-and-greed',
-                              wait_until='domcontentloaded', timeout=60000)
+                              wait_until='networkidle', timeout=60000)
 
-                await asyncio.sleep(5)
+                # 페이지 로딩 대기
+                await asyncio.sleep(8)
 
                 # Fear & Greed 게이지 + 히스토리 영역 캡처
                 screenshot_bytes = await page.screenshot(
@@ -196,14 +211,27 @@ class NaverFinanceTracker:
             from playwright.async_api import async_playwright
 
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                page = await browser.new_page(viewport={'width': 1400, 'height': 900})
+                # 클라우드 환경(Render)용 브라우저 설정
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                    ]
+                )
 
-                # 새로운 네이버 증권 미국 시장 URL
+                context = await browser.new_context(
+                    viewport={'width': 1400, 'height': 900},
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                )
+                page = await context.new_page()
+
+                # 네이버 증권 미국 시장 URL
                 await page.goto('https://stock.naver.com/market/stock/usa',
-                              wait_until='domcontentloaded', timeout=60000)
+                              wait_until='networkidle', timeout=60000)
 
-                await asyncio.sleep(3)
+                await asyncio.sleep(5)
 
                 # 다우존스, 나스닥, S&P 500 영역만 캡처 (상단 탭 포함)
                 screenshot_bytes = await page.screenshot(
@@ -227,14 +255,27 @@ class NaverFinanceTracker:
             from playwright.async_api import async_playwright
 
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                page = await browser.new_page(viewport={'width': 1400, 'height': 900})
+                # 클라우드 환경(Render)용 브라우저 설정
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                    ]
+                )
+
+                context = await browser.new_context(
+                    viewport={'width': 1400, 'height': 900},
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                )
+                page = await context.new_page()
 
                 # 네이버 증권 한국 시장 URL
                 await page.goto('https://stock.naver.com/market/stock/kr',
-                              wait_until='domcontentloaded', timeout=60000)
+                              wait_until='networkidle', timeout=60000)
 
-                await asyncio.sleep(3)
+                await asyncio.sleep(5)
 
                 # KOSPI, KOSDAQ 영역만 캡처 (우측 잘린 차트 제거)
                 screenshot_bytes = await page.screenshot(
