@@ -163,7 +163,7 @@ class NewsScheduler:
             except Exception as e:
                 logger.error(f"Redis 저장 오류: {e}")
 
-    def _get_last_alert_time(self) -> datetime | None:
+    def _get_last_alert_time(self):
         """마지막 알림 발송 시간 조회 (Redis 기반)"""
         if redis_client:
             try:
