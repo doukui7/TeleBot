@@ -1,4 +1,4 @@
-# TeleBot Python Dependencies (Minimal Test)
+# TeleBot Python Dependencies
 
 # Telegram Bot
 python-telegram-bot>=20.0
@@ -14,5 +14,15 @@ aiohttp>=3.9.0
 # Environment Variables
 python-dotenv>=1.0.0
 
+# Data Processing
+pandas>=2.0.0
+matplotlib>=3.7.0
+
+# Browser Automation (Screenshots)
+playwright>=1.40.0
+
 # Logging
 colorlog>=6.7.0
+
+# Redis (Optional - Upstash)
+upstash-redis>=1.0.0
