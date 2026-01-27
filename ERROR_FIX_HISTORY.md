@@ -431,10 +431,101 @@ else:  # CLOSED/UNKNOWN
 
 ---
 
+### 3.6 브리핑 중복 발송 방지 (2026-01-28)
+
+**문제**: Render 재배포 시 오전/오후 브리핑이 중복 발송됨
+
+**원인**: APScheduler cron 작업이 재시작 직후 실행됨
+
+**해결**: Redis 기반 브리핑 발송 기록
+```python
+BRIEFING_COOLDOWN_SECONDS = 12 * 60 * 60  # 12시간
+
+def _check_briefing_sent(self, briefing_type: str) -> bool:
+    key = f"briefing:{briefing_type}:{datetime.now().strftime('%Y-%m-%d')}"
+    if redis_client:
+        return bool(redis_client.exists(key))
+    return False
+
+def _mark_briefing_sent(self, briefing_type: str):
+    key = f"briefing:{briefing_type}:{datetime.now().strftime('%Y-%m-%d')}"
+    redis_client.setex(key, BRIEFING_COOLDOWN_SECONDS, "1")
+```
+
+**파일**: `python/scheduler.py`
+
+**커밋**: `f02e1c1` - fix: 브리핑 중복 발송 방지 (Redis 기반)
+
+---
+
+### 3.7 30분 최소 간격 Redis 기반 변경 (2026-01-28)
+
+**문제**: Render 재시작 시 `last_alert_time`이 초기화되어 30분 간격 무시됨
+
+**원인**: `last_alert_time`이 메모리에만 저장됨
+
+**해결**: Redis에 마지막 알림 시간 저장
+```python
+LAST_ALERT_TIME_KEY = "last_alert_time"
+
+def _get_last_alert_time(self) -> datetime | None:
+    if redis_client:
+        timestamp = redis_client.get(LAST_ALERT_TIME_KEY)
+        if timestamp:
+            return datetime.fromisoformat(timestamp)
+    return self.last_alert_time  # 폴백
+
+def _set_last_alert_time(self, dt: datetime):
+    self.last_alert_time = dt
+    if redis_client:
+        redis_client.setex(LAST_ALERT_TIME_KEY, 3600, dt.isoformat())  # 1시간 TTL
+```
+
+**파일**: `python/scheduler.py`
+
+**커밋**: `646a02b` - fix: 30분 최소 간격 체크를 Redis 기반으로 변경
+
+---
+
+### 3.8 알림 중복 발송 - 이중 체크 (2026-01-28)
+
+**문제**: 같은 종목/레벨 알림이 4분 간격으로 중복 발송됨
+- 02:53: UNH -19.90%, CVS -14.34%, GM +8.61%, SOXL +8.19%
+- 02:57: UNH -19.87%, CVS -14.58%, GM +8.74%, SOXL +8.19%
+
+**원인**: Render 배포 시 두 인스턴스 동시 실행 가능성
+
+**해결**: 발송 직전 이중 체크 추가
+```python
+# 1차 필터링: Redis 체크만 (저장 안함)
+for alert in alerts:
+    if not self._check_alert_exists(alert.symbol, current_level):
+        new_alerts.append(alert)
+
+# 30분 간격 체크...
+
+# 2차 필터링: 발송 직전 다시 체크 + 즉시 저장
+final_alerts = []
+for alert in new_alerts:
+    current_level = self._get_threshold_level(alert.change_percent, alert.category)
+    if not self._check_alert_exists(alert.symbol, current_level):
+        final_alerts.append(alert)
+        self._save_alert_record(alert.symbol, current_level)  # 즉시 저장
+```
+
+**파일**: `python/scheduler.py`
+
+**커밋**: `85dbdef` - fix: 알림 중복 발송 방지 - 발송 직전 이중 체크 추가
+
+---
+
 ## 변경 이력
 
 | 날짜 | 섹션 | 변경 내용 |
 |------|------|----------|
+| 2026-01-28 | 3.8 | 알림 중복 발송 - 이중 체크 추가 |
+| 2026-01-28 | 3.7 | 30분 최소 간격 Redis 기반 변경 |
+| 2026-01-28 | 3.6 | 브리핑 중복 발송 방지 (Redis 기반) |
 | 2026-01-28 | 2.4 | CNN Fear & Greed 팝업 코드 제거, width 1020 복원 |
 | 2026-01-28 | 2.5 | 네이버 증시 캡처 좌표 최적화 추가 |
 | 2026-01-28 | 3.5 | 주가 알림 최소 30분 간격 추가 |
