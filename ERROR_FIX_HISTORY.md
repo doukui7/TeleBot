@@ -207,12 +207,39 @@ services:
 - Render 대시보드에서 새 서비스를 **Background Worker**로 생성
 - 또는 기존 서비스 삭제 후 render.yaml로 재생성
 
+### 4.6 Port Scan Timeout 오류 (2026-01-27)
+
+**에러**:
+```
+==> Timed Out
+Port scan timeout reached, no open ports detected.
+Bind your service to at least one port.
+```
+
+**원인**:
+- Web Service는 HTTP 포트를 열어야 함
+- 스케줄러가 포트를 바인딩하지 않음
+
+**해결**:
+- `main.py`에 aiohttp 웹 서버 추가 (커밋 `064a074`)
+- `PORT` 환경변수로 포트 바인딩
+- Health check 엔드포인트: `/`, `/health`
+
+```python
+from aiohttp import web
+
+app = web.Application()
+app.router.add_get('/', health_check)
+port = int(os.environ.get('PORT', 10000))
+```
+
 ---
 
 ## 변경 이력
 
 | 날짜 | 섹션 | 변경 내용 |
 |------|------|----------|
+| 2026-01-27 | 4.6 | Port Scan Timeout 오류 추가 |
 | 2026-01-27 | 4.3 | main.py 누락 오류 추가 |
 | 2026-01-27 | 4.4 | 배포 타임아웃 오류 추가 |
 | 2026-01-27 | 4.5 | Service Type 불일치 추가 |
