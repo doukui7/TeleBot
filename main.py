@@ -30,21 +30,21 @@ _scheduler_instance = None
 
 
 async def trigger_morning(request):
-    """수동 오전 브리핑 트리거"""
+    """수동 오전 브리핑 트리거 (중복 체크 무시)"""
     global _scheduler_instance
     if _scheduler_instance:
-        logger.info("수동 오전 브리핑 트리거됨")
-        await _scheduler_instance.send_morning_briefing()
+        logger.info("수동 오전 브리핑 트리거됨 (force=True)")
+        await _scheduler_instance.send_morning_briefing(force=True)
         return web.Response(text="Morning briefing sent!")
     return web.Response(text="Scheduler not ready", status=503)
 
 
 async def trigger_afternoon(request):
-    """수동 오후 브리핑 트리거"""
+    """수동 오후 브리핑 트리거 (중복 체크 무시)"""
     global _scheduler_instance
     if _scheduler_instance:
-        logger.info("수동 오후 브리핑 트리거됨")
-        await _scheduler_instance.send_afternoon_briefing()
+        logger.info("수동 오후 브리핑 트리거됨 (force=True)")
+        await _scheduler_instance.send_afternoon_briefing(force=True)
         return web.Response(text="Afternoon briefing sent!")
     return web.Response(text="Scheduler not ready", status=503)
 

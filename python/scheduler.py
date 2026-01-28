@@ -279,15 +279,18 @@ class NewsScheduler:
         except Exception as e:
             logger.error(f"주가 변동 체크 오류: {e}")
 
-    async def send_morning_briefing(self):
+    async def send_morning_briefing(self, force: bool = False):
         """
         오전 브리핑 발송 (08:00 KST)
         - Fear & Greed 스크린샷
         - 미국 증시 스크린샷
+
+        Args:
+            force: True면 중복 체크 무시 (수동 트리거용)
         """
         try:
-            # 중복 발송 방지 (Redis)
-            if self._check_briefing_sent("morning"):
+            # 중복 발송 방지 (Redis) - force=True면 스킵
+            if not force and self._check_briefing_sent("morning"):
                 logger.info("오전 브리핑 스킵 (이미 발송됨)")
                 return
 
@@ -326,14 +329,17 @@ class NewsScheduler:
         except Exception as e:
             logger.error(f"오전 브리핑 발송 오류: {e}")
 
-    async def send_afternoon_briefing(self):
+    async def send_afternoon_briefing(self, force: bool = False):
         """
         오후 브리핑 발송 (15:30 KST)
         - 한국 증시 스크린샷
+
+        Args:
+            force: True면 중복 체크 무시 (수동 트리거용)
         """
         try:
-            # 중복 발송 방지 (Redis)
-            if self._check_briefing_sent("afternoon"):
+            # 중복 발송 방지 (Redis) - force=True면 스킵
+            if not force and self._check_briefing_sent("afternoon"):
                 logger.info("오후 브리핑 스킵 (이미 발송됨)")
                 return
 
