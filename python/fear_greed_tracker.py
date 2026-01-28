@@ -107,40 +107,42 @@ class FearGreedTracker:
                 # 페이지 로딩 대기
                 await asyncio.sleep(3)
 
-                # 팝업/오버레이 확인
+                # JavaScript로 팝업 강제 제거
                 try:
-                    # 모든 버튼 찾기
-                    all_buttons = await page.locator('button').all_text_contents()
-                    logger.info(f"[DEBUG] 페이지의 모든 버튼: {all_buttons[:10]}")  # 처음 10개만
+                    # 방법 1: Agree 버튼 JavaScript 클릭
+                    await page.evaluate('''
+                        () => {
+                            const buttons = document.querySelectorAll('button');
+                            for (const btn of buttons) {
+                                if (btn.textContent.includes('Agree')) {
+                                    btn.click();
+                                    return true;
+                                }
+                            }
+                            return false;
+                        }
+                    ''')
+                    logger.info("[DEBUG] JavaScript로 Agree 버튼 클릭 시도")
+                    await asyncio.sleep(2)
 
-                    # 팝업 오버레이 확인
-                    overlay = page.locator('[class*="modal"], [class*="overlay"], [class*="popup"], [class*="consent"]')
-                    overlay_count = await overlay.count()
-                    logger.info(f"[DEBUG] 팝업/오버레이 요소 개수: {overlay_count}")
-
-                    # Agree 버튼 찾기 (여러 방법 시도)
-                    agree_selectors = [
-                        'button:has-text("Agree")',
-                        'button:has-text("I Agree")',
-                        'button:has-text("Accept")',
-                        'button:has-text("OK")',
-                        '[class*="consent"] button',
-                        '[class*="modal"] button',
-                    ]
-
-                    clicked = False
-                    for selector in agree_selectors:
-                        btn = page.locator(selector)
-                        count = await btn.count()
-                        logger.info(f"[DEBUG] 셀렉터 '{selector}' 결과: {count}개")
-                        if count > 0 and not clicked:
-                            await btn.first.click()
-                            logger.info(f"[DEBUG] '{selector}' 클릭 성공!")
-                            clicked = True
-                            await asyncio.sleep(2)
-
-                    if not clicked:
-                        logger.warning("[DEBUG] 클릭할 팝업 버튼을 찾지 못함")
+                    # 방법 2: 팝업 DOM 직접 제거
+                    await page.evaluate('''
+                        () => {
+                            // 모달/오버레이 요소 제거
+                            const selectors = [
+                                '[class*="modal"]',
+                                '[class*="overlay"]',
+                                '[class*="consent"]',
+                                '[class*="privacy"]',
+                                '[role="dialog"]'
+                            ];
+                            for (const sel of selectors) {
+                                document.querySelectorAll(sel).forEach(el => el.remove());
+                            }
+                        }
+                    ''')
+                    logger.info("[DEBUG] 팝업 DOM 제거 완료")
+                    await asyncio.sleep(1)
 
                 except Exception as popup_err:
                     logger.warning(f"[DEBUG] 팝업 처리 중 에러: {popup_err}")
