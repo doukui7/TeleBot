@@ -11,6 +11,7 @@
 3. [스케줄러 관련](#3-스케줄러-관련)
 4. [Render 배포 관련](#4-render-배포-관련)
 5. [주가 모니터링 관련](#5-주가-모니터링-관련)
+6. [Cron 설정 관련](#6-cron-설정-관련)
 
 ---
 
@@ -549,10 +550,109 @@ for alert in new_alerts:
 
 ---
 
+## 6. Cron 설정 관련
+
+### 6.1 cron-job.org vs Vercel Cron 비교
+
+| 항목 | cron-job.org | Vercel Cron |
+|------|--------------|-------------|
+| **역할** | 외부 URL 호출 (ping) | Vercel 함수 실행 |
+| **설정 위치** | cron-job.org 웹사이트 | `vercel.json` 파일 |
+| **사용 목적** | Render 서비스 깨우기 | Next.js API 실행 |
+| **무료 제한** | 5분 간격 가능 | Hobby: 1일 1회만 |
+| **TeleBot 용도** | Render 스케줄러 유지 | 프론트엔드 API 호출 |
+
+---
+
+### 6.2 cron-job.org 설정 (Render Keep-Alive)
+
+**목적**: Render 무료 티어의 15분 sleep 방지
+
+**현재 설정**:
+- **Title**: TeleBot Keep Alive
+- **URL**: `https://telebot-0u20.onrender.com`
+- **Schedule**: Every 5 minutes (`*/5 * * * *`)
+- **Timezone**: Asia/Seoul
+- **Status**: Enabled
+
+**설정 방법**:
+1. [cron-job.org](https://cron-job.org) 가입/로그인
+2. Dashboard → Create cronjob
+3. 위 설정 입력 후 Create
+
+**확인 방법**:
+- cron-job.org Dashboard에서 실행 로그 확인
+- 또는: `curl -s -o /dev/null -w "%{http_code}" https://telebot-0u20.onrender.com`
+
+---
+
+### 6.3 Vercel Cron 설정 (Next.js API)
+
+**목적**: Vercel에 배포된 Next.js API 함수 주기적 실행
+
+**파일**: `vercel.json` (feature/portfolio-dashboard 브랜치)
+
+**현재 설정**:
+```json
+{
+    "crons": [
+        {
+            "path": "/api/cron/volatility-alert",
+            "schedule": "0 * * * *"
+        },
+        {
+            "path": "/api/telegram/briefing",
+            "schedule": "0 23 * * 0-4"
+        },
+        {
+            "path": "/api/cron/market-summary?market=kr",
+            "schedule": "0 8 * * 1-5"
+        },
+        {
+            "path": "/api/cron/market-summary?market=us",
+            "schedule": "0 22 * * 0-4"
+        }
+    ]
+}
+```
+
+**스케줄 설명**:
+| Path | Schedule | 설명 |
+|------|----------|------|
+| `/api/cron/volatility-alert` | `0 * * * *` | 매시 정각 |
+| `/api/telegram/briefing` | `0 23 * * 0-4` | 23:00 (일~목) |
+| `/api/cron/market-summary?market=kr` | `0 8 * * 1-5` | 08:00 (월~금) 한국 |
+| `/api/cron/market-summary?market=us` | `0 22 * * 0-4` | 22:00 (일~목) 미국 |
+
+**주의**:
+- `vercel.json`이 **main 브랜치에 없음** (feature 브랜치에만 존재)
+- main으로 머지해야 Vercel cron 활성화됨
+- Vercel Hobby 플랜은 1일 1회 제한 있음
+
+---
+
+### 6.4 Render vs Vercel 스케줄러 비교
+
+| 항목 | Render (Python) | Vercel (Next.js) |
+|------|-----------------|------------------|
+| **스케줄러** | APScheduler | Vercel Cron |
+| **실행 환경** | Python 백엔드 | Next.js API Routes |
+| **주가 알림** | 5분마다 체크 | 매시 정각 |
+| **브리핑** | 08:00, 15:30 | 08:00, 22:00, 23:00 |
+| **Keep-Alive** | cron-job.org 필요 | 불필요 (서버리스) |
+| **무료 제한** | 15분 sleep | 1일 1회 cron |
+
+**현재 구조**:
+- **Render**: 메인 스케줄러 (주가 알림, 브리핑)
+- **Vercel**: 프론트엔드 + 보조 API
+
+---
+
 ## 변경 이력
 
 | 날짜 | 섹션 | 변경 내용 |
 |------|------|----------|
+| 2026-01-28 | 6.1~6.4 | Cron 설정 관련 섹션 추가 (cron-job.org, Vercel Cron) |
 | 2026-01-28 | 4.7 | Render 무료 티어 Sleep 문제 - cron-job.org 설정 필요 |
 | 2026-01-28 | 3.8 | 알림 중복 발송 - 이중 체크 추가 |
 | 2026-01-28 | 3.7 | 30분 최소 간격 Redis 기반 변경 |
