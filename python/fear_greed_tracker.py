@@ -101,7 +101,17 @@ class FearGreedTracker:
                               wait_until='networkidle', timeout=60000)
 
                 # 페이지 로딩 대기
-                await asyncio.sleep(5)
+                await asyncio.sleep(3)
+
+                # "Agree" 버튼 클릭 (Legal Terms 팝업 닫기)
+                try:
+                    agree_btn = page.locator('button:has-text("Agree")')
+                    if await agree_btn.count() > 0:
+                        await agree_btn.click()
+                        logger.info("CNN 팝업 'Agree' 버튼 클릭")
+                        await asyncio.sleep(2)
+                except Exception as popup_err:
+                    logger.warning(f"팝업 닫기 실패 (무시): {popup_err}")
 
                 # Fear & Greed 게이지 + 히스토리 정보 캡처 (전체 영역)
                 screenshot_bytes = await page.screenshot(
