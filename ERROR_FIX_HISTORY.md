@@ -234,6 +234,36 @@ app.router.add_get('/', health_check)
 port = int(os.environ.get('PORT', 10000))
 ```
 
+### 4.7 Render 무료 티어 Sleep 문제 (2026-01-28)
+
+**문제**:
+- 오전 브리핑(08:00)이 발송되지 않음
+- 스케줄러가 중간에 멈춤
+
+**원인**:
+- Render 무료 티어는 **15분간 요청이 없으면 서비스 자동 중지(sleep)**
+- 스케줄러가 내부적으로 동작해도 외부 HTTP 요청이 없으면 중지됨
+- 중지된 상태에서는 cron 작업이 실행되지 않음
+
+**해결**: 외부 서비스로 주기적 ping
+
+1. [cron-job.org](https://cron-job.org) 가입
+2. 새 cronjob 생성:
+   - **Title**: TeleBot Keep Alive
+   - **URL**: `https://telebot-0u20.onrender.com`
+   - **Schedule**: Every 5 minutes
+3. Create 클릭
+
+**대안**:
+- Render 유료 플랜 ($7/월) - 서비스 항상 가동
+- UptimeRobot 등 다른 모니터링 서비스 사용
+
+**확인 방법**:
+```bash
+curl -s -o /dev/null -w "%{http_code}" https://telebot-0u20.onrender.com
+# 200 = 정상, 5xx = 서비스 깨어나는 중
+```
+
 ### 2.4 CNN Fear & Greed 동의 팝업 (2026-01-28)
 
 **문제**: CNN 페이지에 "Legal Terms and Privacy" 동의 팝업이 스크린샷을 가림
@@ -523,6 +553,7 @@ for alert in new_alerts:
 
 | 날짜 | 섹션 | 변경 내용 |
 |------|------|----------|
+| 2026-01-28 | 4.7 | Render 무료 티어 Sleep 문제 - cron-job.org 설정 필요 |
 | 2026-01-28 | 3.8 | 알림 중복 발송 - 이중 체크 추가 |
 | 2026-01-28 | 3.7 | 30분 최소 간격 Redis 기반 변경 |
 | 2026-01-28 | 3.6 | 브리핑 중복 발송 방지 (Redis 기반) |
