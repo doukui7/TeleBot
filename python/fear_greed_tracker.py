@@ -96,6 +96,21 @@ class FearGreedTracker:
                     viewport={'width': 1400, 'height': 1200},
                     user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 )
+
+                # 쿠키 동의 미리 설정 (팝업 방지)
+                await context.add_cookies([{
+                    'name': 'OptanonAlertBoxClosed',
+                    'value': '2024-01-01T00:00:00.000Z',
+                    'domain': '.cnn.com',
+                    'path': '/'
+                }, {
+                    'name': 'OptanonConsent',
+                    'value': 'isGpcEnabled=0&datestamp=Tue+Jan+28+2025&version=6.10.0&isIABGlobal=false&hosts=&consentId=consent&interactionCount=1&landingPath=&groups=C0001:1,C0002:1,C0003:1,C0004:1',
+                    'domain': '.cnn.com',
+                    'path': '/'
+                }])
+                logger.info("[DEBUG] 쿠키 동의 설정 완료")
+
                 page = await context.new_page()
 
                 logger.info("[DEBUG] 페이지 로딩 시작...")
