@@ -107,41 +107,22 @@ class FearGreedTracker:
                 # 페이지 로딩 대기
                 await asyncio.sleep(3)
 
-                # JavaScript로 팝업 강제 제거
+                # CSS로 팝업 강제 숨김
                 try:
-                    # 방법 1: Agree 버튼 JavaScript 클릭
-                    await page.evaluate('''
-                        () => {
-                            const buttons = document.querySelectorAll('button');
-                            for (const btn of buttons) {
-                                if (btn.textContent.includes('Agree')) {
-                                    btn.click();
-                                    return true;
-                                }
-                            }
-                            return false;
+                    await page.add_style_tag(content='''
+                        [class*="modal"], [class*="overlay"], [class*="consent"],
+                        [class*="privacy"], [role="dialog"], [class*="onetrust"],
+                        #onetrust-consent-sdk, .onetrust-pc-dark-filter,
+                        [class*="banner"], [id*="consent"], [id*="privacy"] {
+                            display: none !important;
+                            visibility: hidden !important;
+                            opacity: 0 !important;
+                        }
+                        body {
+                            overflow: auto !important;
                         }
                     ''')
-                    logger.info("[DEBUG] JavaScript로 Agree 버튼 클릭 시도")
-                    await asyncio.sleep(2)
-
-                    # 방법 2: 팝업 DOM 직접 제거
-                    await page.evaluate('''
-                        () => {
-                            // 모달/오버레이 요소 제거
-                            const selectors = [
-                                '[class*="modal"]',
-                                '[class*="overlay"]',
-                                '[class*="consent"]',
-                                '[class*="privacy"]',
-                                '[role="dialog"]'
-                            ];
-                            for (const sel of selectors) {
-                                document.querySelectorAll(sel).forEach(el => el.remove());
-                            }
-                        }
-                    ''')
-                    logger.info("[DEBUG] 팝업 DOM 제거 완료")
+                    logger.info("[DEBUG] CSS로 팝업 숨김 적용")
                     await asyncio.sleep(1)
 
                 except Exception as popup_err:
