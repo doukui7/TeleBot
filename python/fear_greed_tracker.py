@@ -107,21 +107,27 @@ class FearGreedTracker:
                 # 페이지 로딩 대기
                 await asyncio.sleep(3)
 
-                # OneTrust 쿠키 동의 팝업 제거
+                # 팝업 제거: CSS 숨김 + JavaScript 클릭
                 try:
+                    # 1. CSS로 OneTrust 숨김
                     await page.add_style_tag(content='''
-                        #onetrust-consent-sdk,
-                        #onetrust-banner-sdk,
-                        .onetrust-pc-dark-filter,
-                        [class*="onetrust"] {
+                        #onetrust-consent-sdk, #onetrust-banner-sdk,
+                        .onetrust-pc-dark-filter, [class*="onetrust"] {
                             display: none !important;
                         }
-                        body {
-                            overflow: auto !important;
-                        }
+                        body { overflow: auto !important; }
                     ''')
-                    logger.info("[DEBUG] OneTrust 팝업 숨김 적용")
-                    await asyncio.sleep(1)
+
+                    # 2. JavaScript로 Agree 버튼 클릭
+                    await page.evaluate('''() => {
+                        const btn = document.querySelector('#onetrust-accept-btn-handler');
+                        if (btn) btn.click();
+                        document.querySelectorAll('button').forEach(b => {
+                            if (b.textContent.includes('Agree')) b.click();
+                        });
+                    }''')
+                    logger.info("[DEBUG] 팝업 제거 완료")
+                    await asyncio.sleep(2)
 
                 except Exception as popup_err:
                     logger.warning(f"[DEBUG] 팝업 처리 중 에러: {popup_err}")
