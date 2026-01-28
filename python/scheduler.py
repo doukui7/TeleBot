@@ -19,6 +19,7 @@ from market_holidays import is_us_market_holiday
 from fear_greed_tracker import FearGreedTracker, NaverFinanceTracker
 from etf_tracker import ETFTracker
 from etf_table_generator import ETFTableGenerator
+from tqbus_tracker import TqBusTracker
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ class NewsScheduler:
         self.naver_tracker = NaverFinanceTracker()
         self.etf_tracker = ETFTracker()
         self.etf_table_generator = ETFTableGenerator()
+        self.tqbus_tracker = TqBusTracker()
         self.stock_alerted_today: dict = self._load_alert_history()
         self.last_alert_time: datetime = None  # 마지막 알림 발송 시간
 
@@ -363,6 +365,54 @@ class NewsScheduler:
         except Exception as e:
             logger.error(f"오후 브리핑 발송 오류: {e}")
 
+    async def send_tqbus_status(self, force: bool = False):
+        """
+        TQ버스 현재 상태 발송 (18:00 KST)
+
+        Args:
+            force: True면 중복 체크 무시 (수동 트리거용)
+        """
+        try:
+            # 중복 발송 방지 (Redis) - force=True면 스킵
+            if not force and self._check_briefing_sent("tqbus_status"):
+                logger.info("TQ버스 상태 스킵 (이미 발송됨)")
+                return
+
+            logger.info("TQ버스 상태 발송 시작...")
+
+            msg = self.tqbus_tracker.format_status_message()
+            if msg:
+                await self.bot.send_news(msg)
+                logger.info("TQ버스 상태 발송 완료")
+
+            # 발송 완료 기록 (Redis)
+            self._mark_briefing_sent("tqbus_status")
+
+        except Exception as e:
+            logger.error(f"TQ버스 상태 발송 오류: {e}")
+
+    async def check_tqbus_crossover(self):
+        """
+        TQ버스 이평선 돌파 체크 (5분마다 체크, 하루 1회만 알림)
+        """
+        try:
+            # 중복 발송 방지 (Redis)
+            if self._check_briefing_sent("tqbus_crossover"):
+                return  # 오늘 이미 발송됨
+
+            crossover = self.tqbus_tracker.detect_crossover()
+            if crossover:
+                msg = self.tqbus_tracker.format_crossover_message(crossover)
+                if msg:
+                    await self.bot.send_news(msg)
+                    logger.info(f"TQ버스 {crossover} 신호 발송 완료")
+
+                    # 발송 완료 기록 (Redis)
+                    self._mark_briefing_sent("tqbus_crossover")
+
+        except Exception as e:
+            logger.error(f"TQ버스 돌파 체크 오류: {e}")
+
     def start(self):
         """스케줄러 시작"""
         try:
@@ -406,11 +456,35 @@ class NewsScheduler:
                 replace_existing=True
             )
 
+            # TQ버스 현재 상태 (18:00 KST, 화~토 = 미국 장 다음날)
+            self.scheduler.add_job(
+                self.send_tqbus_status,
+                'cron',
+                hour=18,
+                minute=0,
+                day_of_week='tue-sat',
+                id='tqbus_status',
+                name='TQ버스 상태',
+                replace_existing=True
+            )
+
+            # TQ버스 이평선 돌파 체크 (5분마다, 장중에만)
+            self.scheduler.add_job(
+                self.check_tqbus_crossover,
+                'interval',
+                seconds=STOCK_CHECK_INTERVAL,
+                id='tqbus_crossover',
+                name='TQ버스 돌파 체크',
+                replace_existing=True
+            )
+
             self.scheduler.start()
             logger.info("스케줄러 시작 완료")
             logger.info(f"  - 주가 변동 알림 ({STOCK_CHECK_INTERVAL}초 간격)")
             logger.info(f"  - 오전 브리핑 ({briefing_hour:02d}:{briefing_minute:02d} KST, 화~토 = 미국 장마감 후)")
             logger.info("  - 오후 브리핑 (15:30 KST, 평일)")
+            logger.info("  - TQ버스 상태 (18:00 KST, 화~토)")
+            logger.info(f"  - TQ버스 돌파 체크 ({STOCK_CHECK_INTERVAL}초 간격)")
 
         except Exception as e:
             logger.error(f"스케줄러 시작 오류: {e}")
