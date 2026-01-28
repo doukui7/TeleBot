@@ -2,7 +2,7 @@ services:
   - type: worker
     name: telebot-scheduler
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && playwright install chromium --with-deps
     startCommand: python main.py
     envVars:
       - key: TELEGRAM_BOT_TOKEN
