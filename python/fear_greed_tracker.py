@@ -90,6 +90,7 @@ class FearGreedTracker:
                         '--disable-blink-features=AutomationControlled',
                     ]
                 )
+                logger.info("[DEBUG] 브라우저 시작됨")
 
                 context = await browser.new_context(
                     viewport={'width': 1400, 'height': 1200},
@@ -97,26 +98,61 @@ class FearGreedTracker:
                 )
                 page = await context.new_page()
 
+                logger.info("[DEBUG] 페이지 로딩 시작...")
                 await page.goto('https://edition.cnn.com/markets/fear-and-greed',
                               wait_until='networkidle', timeout=60000)
+                logger.info(f"[DEBUG] 페이지 로딩 완료 - URL: {page.url}")
+                logger.info(f"[DEBUG] 페이지 타이틀: {await page.title()}")
 
                 # 페이지 로딩 대기
                 await asyncio.sleep(3)
 
-                # "Agree" 버튼 클릭 (Legal Terms 팝업 닫기)
+                # 팝업/오버레이 확인
                 try:
-                    agree_btn = page.locator('button:has-text("Agree")')
-                    if await agree_btn.count() > 0:
-                        await agree_btn.click()
-                        logger.info("CNN 팝업 'Agree' 버튼 클릭")
-                        await asyncio.sleep(2)
+                    # 모든 버튼 찾기
+                    all_buttons = await page.locator('button').all_text_contents()
+                    logger.info(f"[DEBUG] 페이지의 모든 버튼: {all_buttons[:10]}")  # 처음 10개만
+
+                    # 팝업 오버레이 확인
+                    overlay = page.locator('[class*="modal"], [class*="overlay"], [class*="popup"], [class*="consent"]')
+                    overlay_count = await overlay.count()
+                    logger.info(f"[DEBUG] 팝업/오버레이 요소 개수: {overlay_count}")
+
+                    # Agree 버튼 찾기 (여러 방법 시도)
+                    agree_selectors = [
+                        'button:has-text("Agree")',
+                        'button:has-text("I Agree")',
+                        'button:has-text("Accept")',
+                        'button:has-text("OK")',
+                        '[class*="consent"] button',
+                        '[class*="modal"] button',
+                    ]
+
+                    clicked = False
+                    for selector in agree_selectors:
+                        btn = page.locator(selector)
+                        count = await btn.count()
+                        logger.info(f"[DEBUG] 셀렉터 '{selector}' 결과: {count}개")
+                        if count > 0 and not clicked:
+                            await btn.first.click()
+                            logger.info(f"[DEBUG] '{selector}' 클릭 성공!")
+                            clicked = True
+                            await asyncio.sleep(2)
+
+                    if not clicked:
+                        logger.warning("[DEBUG] 클릭할 팝업 버튼을 찾지 못함")
+
                 except Exception as popup_err:
-                    logger.warning(f"팝업 닫기 실패 (무시): {popup_err}")
+                    logger.warning(f"[DEBUG] 팝업 처리 중 에러: {popup_err}")
+
+                # 캡처 전 페이지 상태 확인
+                logger.info("[DEBUG] 스크린샷 캡처 시작...")
 
                 # Fear & Greed 게이지 + 히스토리 정보 캡처 (전체 영역)
                 screenshot_bytes = await page.screenshot(
                     clip={'x': 20, 'y': 480, 'width': 1020, 'height': 620}
                 )
+                logger.info(f"[DEBUG] 스크린샷 크기: {len(screenshot_bytes)} bytes")
 
                 await browser.close()
 
