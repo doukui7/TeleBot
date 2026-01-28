@@ -300,45 +300,27 @@ class NewsScheduler:
 
             logger.info("오전 브리핑 발송 시작...")
 
-            # 1. Fear & Greed 스크린샷
-            fg_screenshot = await self.fear_greed_tracker.capture_fear_greed_screenshot()
-            if fg_screenshot:
-                await self.bot.send_photo_buffer(fg_screenshot, "🌅 <b>오전 브리핑</b> - Fear & Greed Index")
-                logger.info("Fear & Greed 스크린샷 발송 완료")
-            else:
-                # 스크린샷 실패 시 텍스트 폴백
-                fg_data = self.fear_greed_tracker.fetch_fear_greed_data()
-                if fg_data:
-                    msg = self.fear_greed_tracker.format_text_message(fg_data)
-                    await self.bot.send_news(msg)
-                    logger.info("Fear & Greed 텍스트 폴백 발송 완료")
+            # 1. Fear & Greed (텍스트)
+            fg_data = self.fear_greed_tracker.fetch_fear_greed_data()
+            if fg_data:
+                msg = self.fear_greed_tracker.format_text_message(fg_data)
+                await self.bot.send_news(msg)
+                logger.info("Fear & Greed 텍스트 발송 완료")
 
-            # 2. 미국 증시 스크린샷
-            us_screenshot = await self.naver_tracker.capture_naver_us_market_screenshot()
-            if us_screenshot:
-                await self.bot.send_photo_buffer(us_screenshot, "📊 <b>미국 증시 현황</b>")
-                logger.info("미국 증시 스크린샷 발송 완료")
-            else:
-                # 스크린샷 실패 시 텍스트 폴백
-                us_data = self.naver_tracker.fetch_us_market_data()
-                if us_data:
-                    msg = self.naver_tracker.format_text_message(us_data)
-                    await self.bot.send_news(msg)
-                    logger.info("미국 증시 텍스트 폴백 발송 완료")
+            # 2. 미국 증시 (텍스트)
+            us_data = self.naver_tracker.fetch_us_market_data()
+            if us_data:
+                msg = self.naver_tracker.format_text_message(us_data)
+                await self.bot.send_news(msg)
+                logger.info("미국 증시 텍스트 발송 완료")
 
-            # 3. 3X ETF 리스트
+            # 3. 3X ETF 리스트 (텍스트)
             try:
                 etf_data = self.etf_tracker.get_all_etf_data()
                 if etf_data:
-                    etf_image = self.etf_table_generator.create_table_image(etf_data)
-                    if etf_image:
-                        await self.bot.send_photo_buffer(etf_image, "📈 <b>3X ETF LIST</b>")
-                        logger.info("3X ETF 리스트 발송 완료")
-                    else:
-                        # 이미지 실패 시 텍스트 폴백
-                        etf_msg = self.etf_tracker.format_etf_report(etf_data)
-                        await self.bot.send_news(etf_msg)
-                        logger.info("3X ETF 텍스트 폴백 발송 완료")
+                    etf_msg = self.etf_tracker.format_etf_report(etf_data)
+                    await self.bot.send_news(etf_msg)
+                    logger.info("3X ETF 텍스트 발송 완료")
             except Exception as etf_err:
                 logger.error(f"3X ETF 발송 오류: {etf_err}")
 
@@ -365,13 +347,14 @@ class NewsScheduler:
 
             logger.info("오후 브리핑 발송 시작...")
 
-            # 한국 증시 스크린샷
-            kr_screenshot = await self.naver_tracker.capture_naver_kr_market_screenshot()
-            if kr_screenshot:
-                await self.bot.send_photo_buffer(kr_screenshot, "🇰🇷 <b>오후 브리핑</b> - 한국 증시 마감")
-                logger.info("한국 증시 스크린샷 발송 완료")
+            # 한국 증시 (텍스트)
+            kr_data = self.naver_tracker.fetch_kr_market_data()
+            if kr_data:
+                msg = self.naver_tracker.format_kr_text_message(kr_data)
+                await self.bot.send_news(msg)
+                logger.info("한국 증시 텍스트 발송 완료")
             else:
-                logger.warning("한국 증시 스크린샷 캡처 실패")
+                logger.warning("한국 증시 데이터 가져오기 실패")
 
             # 발송 완료 기록 (Redis)
             self._mark_briefing_sent("afternoon")

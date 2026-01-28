@@ -251,6 +251,76 @@ class NaverFinanceTracker:
         msg += f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         return msg
 
+    def fetch_kr_market_data(self):
+        """한국 시장 데이터 가져오기 (Yahoo Finance)"""
+        kr_indices = [
+            ('^KS11', '코스피'),
+            ('^KQ11', '코스닥'),
+        ]
+        results = []
+
+        for symbol, name in kr_indices:
+            try:
+                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+                params = {"interval": "1d", "range": "5d"}
+
+                response = requests.get(url, params=params, headers=self._headers, timeout=10)
+
+                if response.status_code != 200:
+                    continue
+
+                data = response.json()
+                result = data.get("chart", {}).get("result", [])
+
+                if not result:
+                    continue
+
+                meta = result[0].get("meta", {})
+                quotes = result[0].get("indicators", {}).get("quote", [{}])[0]
+                closes = quotes.get("close", [])
+
+                valid_closes = [c for c in closes if c is not None]
+
+                if len(valid_closes) >= 2:
+                    price = valid_closes[-1]
+                    prev_close = valid_closes[-2]
+                elif len(valid_closes) == 1:
+                    price = valid_closes[-1]
+                    prev_close = meta.get("chartPreviousClose", price)
+                else:
+                    continue
+
+                change = price - prev_close
+                change_pct = (change / prev_close) * 100 if prev_close != 0 else 0
+
+                results.append({
+                    'name': name,
+                    'price': price,
+                    'change': change,
+                    'change_pct': change_pct
+                })
+
+            except Exception as e:
+                logger.warning(f"{name} 데이터 가져오기 실패: {e}")
+
+        return results
+
+    def format_kr_text_message(self, data):
+        """한국 증시 텍스트 메시지 생성"""
+        if not data:
+            return None
+
+        msg = "🇰🇷 <b>한국 증시 마감</b>\n\n"
+
+        for item in data:
+            arrow = '🔺' if item['change'] >= 0 else '🔻'
+            color_sign = '+' if item['change'] >= 0 else ''
+            msg += f"{arrow} <b>{item['name']}</b>\n"
+            msg += f"   {item['price']:,.2f} ({color_sign}{item['change_pct']:.2f}%)\n\n"
+
+        msg += f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        return msg
+
     async def capture_naver_world_screenshot(self):
         """네이버 금융 세계 증시 페이지 스크린샷 캡처 (deprecated - use capture_naver_us_market_screenshot)"""
         return await self.capture_naver_us_market_screenshot()
