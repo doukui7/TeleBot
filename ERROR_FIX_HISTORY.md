@@ -588,9 +588,14 @@ for alert in new_alerts:
 
 ### 6.3 Vercel Cron 설정 (Next.js API)
 
-**목적**: Vercel에 배포된 Next.js API 함수 주기적 실행
+> ⚠️ **TeleBot과 무관**: 이 설정은 `feature/portfolio-dashboard` 브랜치에 있는 별도의 "Online Dashboard" 프로젝트 내용입니다.
+> TeleBot은 Render + APScheduler만 사용하며, Vercel Cron은 사용하지 않습니다.
 
-**파일**: `vercel.json` (feature/portfolio-dashboard 브랜치)
+**브랜치 내용**: `feature/portfolio-dashboard`는 투자 대시보드 (WDR, 황금변기, TQ버스 전략, 강의 판매 등) 프로젝트로, TeleBot 텔레그램 봇과 별개입니다.
+
+**목적**: Vercel에 배포된 Next.js API 함수 주기적 실행 (참고용)
+
+**파일**: `vercel.json` (feature/portfolio-dashboard 브랜치 - 미사용)
 
 **현재 설정**:
 ```json
@@ -624,9 +629,9 @@ for alert in new_alerts:
 | `/api/cron/market-summary?market=kr` | `0 8 * * 1-5` | 08:00 (월~금) 한국 |
 | `/api/cron/market-summary?market=us` | `0 22 * * 0-4` | 22:00 (일~목) 미국 |
 
-**주의**:
-- `vercel.json`이 **main 브랜치에 없음** (feature 브랜치에만 존재)
-- main으로 머지해야 Vercel cron 활성화됨
+**참고** (미사용):
+- 이 브랜치는 TeleBot에 머지하지 않음 (별도 프로젝트)
+- TeleBot은 Render만 사용
 - Vercel Hobby 플랜은 1일 1회 제한 있음
 
 ---

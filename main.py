@@ -25,6 +25,30 @@ async def health_check(request):
     return web.Response(text="TeleBot is running!")
 
 
+# 전역 스케줄러 인스턴스
+_scheduler_instance = None
+
+
+async def trigger_morning(request):
+    """수동 오전 브리핑 트리거"""
+    global _scheduler_instance
+    if _scheduler_instance:
+        logger.info("수동 오전 브리핑 트리거됨")
+        await _scheduler_instance.send_morning_briefing()
+        return web.Response(text="Morning briefing sent!")
+    return web.Response(text="Scheduler not ready", status=503)
+
+
+async def trigger_afternoon(request):
+    """수동 오후 브리핑 트리거"""
+    global _scheduler_instance
+    if _scheduler_instance:
+        logger.info("수동 오후 브리핑 트리거됨")
+        await _scheduler_instance.send_afternoon_briefing()
+        return web.Response(text="Afternoon briefing sent!")
+    return web.Response(text="Scheduler not ready", status=503)
+
+
 async def send_test_briefing():
     """시작 시 테스트 브리핑 발송"""
     from fear_greed_tracker import FearGreedTracker, NaverFinanceTracker
@@ -62,9 +86,11 @@ async def send_test_briefing():
 
 async def start_scheduler():
     """스케줄러 시작"""
+    global _scheduler_instance
     from scheduler import NewsScheduler
     scheduler = NewsScheduler()
     scheduler.start()
+    _scheduler_instance = scheduler
     return scheduler
 
 
@@ -87,6 +113,8 @@ async def main():
     app = web.Application()
     app.router.add_get('/', health_check)
     app.router.add_get('/health', health_check)
+    app.router.add_get('/trigger/morning', trigger_morning)
+    app.router.add_get('/trigger/afternoon', trigger_afternoon)
 
     port = int(os.environ.get('PORT', 10000))
     logger.info(f"HTTP 서버 시작 (포트: {port})")
