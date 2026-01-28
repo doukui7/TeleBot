@@ -49,6 +49,24 @@ async def trigger_afternoon(request):
     return web.Response(text="Scheduler not ready", status=503)
 
 
+async def trigger_fg(request):
+    """Fear & Greed만 전송"""
+    from fear_greed_tracker import FearGreedTracker
+    from telegram_bot import NewsChannelBot
+    from config import TELEGRAM_BOT_TOKEN, CHANNEL_ID
+
+    logger.info("Fear & Greed 수동 전송 시작")
+    bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, CHANNEL_ID)
+    tracker = FearGreedTracker()
+
+    screenshot = await tracker.capture_fear_greed_screenshot()
+    if screenshot:
+        await bot.send_photo_buffer(screenshot, "😱 <b>Fear & Greed Index</b>")
+        logger.info("Fear & Greed 전송 완료")
+        return web.Response(text="Fear & Greed sent!")
+    return web.Response(text="Capture failed", status=500)
+
+
 async def send_test_briefing():
     """시작 시 테스트 브리핑 발송"""
     from fear_greed_tracker import FearGreedTracker, NaverFinanceTracker
@@ -115,6 +133,7 @@ async def main():
     app.router.add_get('/health', health_check)
     app.router.add_get('/trigger/morning', trigger_morning)
     app.router.add_get('/trigger/afternoon', trigger_afternoon)
+    app.router.add_get('/trigger/fg', trigger_fg)
 
     port = int(os.environ.get('PORT', 10000))
     logger.info(f"HTTP 서버 시작 (포트: {port})")
