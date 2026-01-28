@@ -120,32 +120,32 @@ class FearGreedTracker:
                 logger.info(f"[DEBUG] 페이지 타이틀: {await page.title()}")
 
                 # 페이지 로딩 대기
-                await asyncio.sleep(3)
+                await asyncio.sleep(2)
 
-                # 팝업 제거: CSS 숨김 + JavaScript 클릭
+                # CNN "Legal Terms and Privacy" 팝업 처리 (Playwright 직접 클릭)
                 try:
-                    # 1. CSS로 OneTrust 숨김
-                    await page.add_style_tag(content='''
-                        #onetrust-consent-sdk, #onetrust-banner-sdk,
-                        .onetrust-pc-dark-filter, [class*="onetrust"] {
-                            display: none !important;
-                        }
-                        body { overflow: auto !important; }
-                    ''')
-
-                    # 2. JavaScript로 Agree 버튼 클릭
-                    await page.evaluate('''() => {
-                        const btn = document.querySelector('#onetrust-accept-btn-handler');
-                        if (btn) btn.click();
-                        document.querySelectorAll('button').forEach(b => {
-                            if (b.textContent.includes('Agree')) b.click();
-                        });
-                    }''')
-                    logger.info("[DEBUG] 팝업 제거 완료")
-                    await asyncio.sleep(2)
-
+                    # Agree 버튼 찾기 및 클릭
+                    agree_button = page.locator('button:has-text("Agree")')
+                    if await agree_button.count() > 0:
+                        logger.info("[DEBUG] Agree 버튼 발견, 클릭 시도...")
+                        await agree_button.first.click(timeout=5000)
+                        logger.info("[DEBUG] Agree 버튼 클릭 완료")
+                        await asyncio.sleep(2)
+                    else:
+                        logger.info("[DEBUG] Agree 버튼 없음 - 팝업 이미 처리됨")
                 except Exception as popup_err:
-                    logger.warning(f"[DEBUG] 팝업 처리 중 에러: {popup_err}")
+                    logger.warning(f"[DEBUG] 팝업 클릭 실패: {popup_err}")
+                    # 폴백: JavaScript로 클릭 시도
+                    try:
+                        await page.evaluate('''() => {
+                            document.querySelectorAll('button').forEach(b => {
+                                if (b.textContent.trim() === 'Agree') b.click();
+                            });
+                        }''')
+                        logger.info("[DEBUG] JavaScript 폴백 클릭 실행")
+                        await asyncio.sleep(2)
+                    except:
+                        pass
 
                 # 캡처 전 페이지 상태 확인
                 logger.info("[DEBUG] 스크린샷 캡처 시작...")
