@@ -116,7 +116,9 @@ class FearGreedTracker:
                 return buf
 
         except Exception as e:
+            import traceback
             logger.error(f"Fear & Greed 스크린샷 캡처 실패: {e}")
+            logger.error(f"상세 에러: {traceback.format_exc()}")
             return None
 
 
