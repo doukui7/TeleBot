@@ -12,11 +12,13 @@ import json
 import os
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from config import TELEGRAM_BOT_TOKEN, CHANNEL_ID, STOCK_CHECK_INTERVAL, UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN
+from config import TELEGRAM_BOT_TOKEN, CHANNEL_ID, STOCK_CHECK_INTERVAL, UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN, get_us_market_close_time_kst
 from telegram_bot import NewsChannelBot
 from stock_monitor import StockMonitor
 from market_holidays import is_us_market_holiday
 from fear_greed_tracker import FearGreedTracker, NaverFinanceTracker
+from etf_tracker import ETFTracker
+from etf_table_generator import ETFTableGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +57,8 @@ class NewsScheduler:
         self.stock_monitor = StockMonitor()
         self.fear_greed_tracker = FearGreedTracker()
         self.naver_tracker = NaverFinanceTracker()
+        self.etf_tracker = ETFTracker()
+        self.etf_table_generator = ETFTableGenerator()
         self.stock_alerted_today: dict = self._load_alert_history()
         self.last_alert_time: datetime = None  # 마지막 알림 발송 시간
 
@@ -322,6 +326,22 @@ class NewsScheduler:
                     await self.bot.send_news(msg)
                     logger.info("미국 증시 텍스트 폴백 발송 완료")
 
+            # 3. 3X ETF 리스트
+            try:
+                etf_data = self.etf_tracker.get_all_etf_data()
+                if etf_data:
+                    etf_image = self.etf_table_generator.generate(etf_data)
+                    if etf_image:
+                        await self.bot.send_photo_buffer(etf_image, "📈 <b>3X ETF LIST</b>")
+                        logger.info("3X ETF 리스트 발송 완료")
+                    else:
+                        # 이미지 실패 시 텍스트 폴백
+                        etf_msg = self.etf_tracker.format_message(etf_data)
+                        await self.bot.send_news(etf_msg)
+                        logger.info("3X ETF 텍스트 폴백 발송 완료")
+            except Exception as etf_err:
+                logger.error(f"3X ETF 발송 오류: {etf_err}")
+
             # 발송 완료 기록 (Redis)
             self._mark_briefing_sent("morning")
             logger.info("오전 브리핑 발송 완료")
@@ -375,15 +395,19 @@ class NewsScheduler:
                 replace_existing=True
             )
 
-            # 오전 브리핑 (08:00 KST, 평일만)
+            # 오전 브리핑 (미국 장 마감 후 30분, 평일만)
+            # 서머타임: 05:30 KST, 일반: 06:30 KST
+            close_hour, _ = get_us_market_close_time_kst()
+            briefing_hour = close_hour
+            briefing_minute = 30
             self.scheduler.add_job(
                 self.send_morning_briefing,
                 'cron',
-                hour=8,
-                minute=0,
-                day_of_week='mon-fri',
+                hour=briefing_hour,
+                minute=briefing_minute,
+                day_of_week='tue-sat',  # 미국 월~금 마감 = 한국 화~토
                 id='morning_briefing',
-                name='오전 브리핑',
+                name='오전 브리핑 (장마감 후)',
                 replace_existing=True
             )
 
@@ -402,7 +426,7 @@ class NewsScheduler:
             self.scheduler.start()
             logger.info("스케줄러 시작 완료")
             logger.info(f"  - 주가 변동 알림 ({STOCK_CHECK_INTERVAL}초 간격)")
-            logger.info("  - 오전 브리핑 (08:00 KST, 평일)")
+            logger.info(f"  - 오전 브리핑 ({briefing_hour:02d}:{briefing_minute:02d} KST, 화~토 = 미국 장마감 후)")
             logger.info("  - 오후 브리핑 (15:30 KST, 평일)")
 
         except Exception as e:
