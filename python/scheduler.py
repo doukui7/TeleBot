@@ -330,13 +330,13 @@ class NewsScheduler:
             try:
                 etf_data = self.etf_tracker.get_all_etf_data()
                 if etf_data:
-                    etf_image = self.etf_table_generator.generate(etf_data)
+                    etf_image = self.etf_table_generator.create_table_image(etf_data)
                     if etf_image:
                         await self.bot.send_photo_buffer(etf_image, "📈 <b>3X ETF LIST</b>")
                         logger.info("3X ETF 리스트 발송 완료")
                     else:
                         # 이미지 실패 시 텍스트 폴백
-                        etf_msg = self.etf_tracker.format_message(etf_data)
+                        etf_msg = self.etf_tracker.format_etf_report(etf_data)
                         await self.bot.send_news(etf_msg)
                         logger.info("3X ETF 텍스트 폴백 발송 완료")
             except Exception as etf_err:
