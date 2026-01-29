@@ -164,14 +164,37 @@ class StockMonitor:
 
     # 3x 레버리지 ETF (5% 이상 변동 시 알림) - 인버스 제외
     LEVERAGED_ETFS = {
+        # 주요 지수
         "TQQQ": "ProShares UltraPro QQQ (나스닥 3배)",
         "UPRO": "ProShares UltraPro S&P500 (S&P 3배)",
-        "SOXL": "Direxion Semiconductor Bull 3X (반도체 3배)",
-        "LABU": "Direxion Biotech Bull 3X (바이오 3배)",
         "TNA": "Direxion Small Cap Bull 3X (소형주 3배)",
-        "FAS": "Direxion Financial Bull 3X (금융 3배)",
+        # 섹터
+        "SOXL": "Direxion Semiconductor Bull 3X (반도체 3배)",
         "TECL": "Direxion Technology Bull 3X (기술 3배)",
         "FNGU": "MicroSectors FANG+ 3X (빅테크 3배)",
+        "BULZ": "MicroSectors FANG & Innovation 3X (혁신 3배)",
+        "WEBL": "Direxion Internet Bull 3X (인터넷 3배)",
+        "UBOT": "Direxion Robotics AI Bull 3X (로봇/AI 3배)",
+        "FAS": "Direxion Financial Bull 3X (금융 3배)",
+        "DPST": "Direxion Regional Banks Bull 3X (지방은행 3배)",
+        "LABU": "Direxion Biotech Bull 3X (바이오 3배)",
+        "CURE": "Direxion Healthcare Bull 3X (헬스케어 3배)",
+        "PILL": "Direxion Pharmaceutical Bull 3X (제약 3배)",
+        "NAIL": "Direxion Homebuilders Bull 3X (주택건설 3배)",
+        "DFEN": "Direxion Aerospace Bull 3X (방산/항공 3배)",
+        "DUSL": "Direxion Industrials Bull 3X (산업 3배)",
+        "TPOR": "Direxion Transportation Bull 3X (운송 3배)",
+        "RETL": "Direxion Retail Bull 3X (리테일 3배)",
+        "WANT": "Direxion Consumer Bull 3X (소비재 3배)",
+        "DRN": "Direxion Real Estate Bull 3X (부동산 3배)",
+        "UTSL": "Direxion Utilities Bull 3X (유틸리티 3배)",
+        # 에너지/원자재
+        "ERX": "Direxion Energy Bull 3X (에너지 3배)",
+        "GUSH": "Direxion Oil & Gas Bull 3X (석유/가스 3배)",
+        "NUGT": "Direxion Gold Miners Bull 3X (금광주 3배)",
+        # 채권
+        "TMF": "Direxion Treasury Bull 3X (장기국채 3배)",
+        "TYD": "Direxion 7-10Y Treasury Bull 3X (중기국채 3배)",
     }
 
     # 변동률 임계값
