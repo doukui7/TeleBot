@@ -455,7 +455,7 @@ class NewsScheduler:
         except Exception as e:
             logger.error(f"배당주 가격 변동 체크 오류: {e}")
 
- async def send_tqbus_status(self, force: bool = False):
+    async def send_tqbus_status(self, force: bool = False):
         """
         TQ버스 현재 상태 발송 (18:00 KST)
 
