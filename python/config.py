@@ -12,6 +12,7 @@ load_dotenv()
 # Telegram 설정
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
+DIVIDEND_CHANNEL_ID = os.getenv('DIVIDEND_CHANNEL_ID', '@USstockdividend')
 
 # 뉴스 API 설정
 NEWS_API_KEY = os.getenv('NEWS_API_KEY')

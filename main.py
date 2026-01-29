@@ -76,6 +76,16 @@ async def trigger_fg(request):
     return web.Response(text="Capture failed", status=500)
 
 
+async def trigger_dividend(request):
+    """배당 브리핑 수동 트리거"""
+    global _scheduler_instance
+    if _scheduler_instance:
+        logger.info("수동 배당 브리핑 트리거됨 (force=True)")
+        await _scheduler_instance.send_dividend_briefing(force=True)
+        return web.Response(text="Dividend briefing sent!")
+    return web.Response(text="Scheduler not ready", status=503)
+
+
 async def send_test_briefing():
     """시작 시 테스트 브리핑 발송"""
     from fear_greed_tracker import FearGreedTracker, NaverFinanceTracker

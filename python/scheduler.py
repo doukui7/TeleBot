@@ -20,7 +20,7 @@ from fear_greed_tracker import FearGreedTracker, NaverFinanceTracker
 from etf_tracker import ETFTracker
 from etf_table_generator import ETFTableGenerator
 from tqbus_tracker import TqBusTracker
-from dividend_monitor import DividendMonitor
+from dividend_monitor import DividendMonitor, DividendAlertMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,8 @@ class NewsScheduler:
         self.etf_tracker = ETFTracker()
         self.etf_table_generator = ETFTableGenerator()
         self.tqbus_tracker = TqBusTracker()
+        self.dividend_monitor = DividendMonitor()
+        self.dividend_alert_monitor = DividendAlertMonitor()
         self.stock_alerted_today: dict = self._load_alert_history()
         self.last_alert_time: datetime = None  # 마지막 알림 발송 시간
 
@@ -479,6 +481,109 @@ class NewsScheduler:
         except Exception as e:
             logger.error(f"TQ버스 상태 발송 오류: {e}")
 
+    async def send_dividend_briefing(self, force: bool = False):
+        """
+        배당주 브리핑 발송 (09:00 KST)
+        """
+        try:
+            # 중복 발송 방지 (Redis) - force=True면 스킵
+            if not force and self._check_briefing_sent("dividend"):
+                logger.info("배당 브리핑 스킵 (이미 발송됨)")
+                return
+
+            logger.info("배당 브리핑 발송 시작...")
+
+            # 배당 데이터 수집
+            dividend_data = self.dividend_monitor.fetch_dividend_data()
+            if dividend_data:
+                msg = self.dividend_monitor.format_dividend_briefing(dividend_data)
+                
+                # 배당 채널로 발송 (config.py의 DIVIDEND_CHANNEL_ID 사용 필요)
+                # 현재 NewsChannelBot은 기본 TOKEN/CHANNEL_ID만 사용하므로
+                # 배당 채널용 봇 인스턴스를 따로 생성하거나, send_news에 chat_id 인자를 추가해야 함.
+                # 편의상 기존 봇 인스턴스에 채널 ID만 바꿔서 호출 시도 (TelegramBot 클래스 수정 필요할 수 있음)
+                # 여기서는 NewsChannelBot이 단일 채널 고정이라 가정하고,
+                # 새로운 봇 인스턴스를 생성하여 배당 채널 ID를 주입.
+                from config import TELEGRAM_BOT_TOKEN, DIVIDEND_CHANNEL_ID
+                
+                # DIVIDEND_CHANNEL_ID가 설정되어 있으면 그쪽으로, 아니면 기본 채널로
+                target_channel = DIVIDEND_CHANNEL_ID if DIVIDEND_CHANNEL_ID else CHANNEL_ID
+                
+                dividend_bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, target_channel)
+                await dividend_bot.send_news(msg)
+                logger.info(f"배당 브리핑 발송 완료 (Target: {target_channel})")
+            else:
+                logger.warning("배당 데이터 수집 실패 또는 데이터 없음")
+
+            # 발송 완료 기록 (Redis)
+            self._mark_briefing_sent("dividend")
+
+        except Exception as e:
+            logger.error(f"배당 브리핑 발송 오류: {e}")
+
+    async def check_dividend_price_alerts(self):
+        """
+        배당 포트폴리오 가격 변동 알림 (5분 간격)
+        """
+        try:
+             # 배당 채널 봇 인스턴스 생성
+            from config import TELEGRAM_BOT_TOKEN, DIVIDEND_CHANNEL_ID
+            target_channel = DIVIDEND_CHANNEL_ID if DIVIDEND_CHANNEL_ID else CHANNEL_ID
+            dividend_bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, target_channel)
+
+            # 가격 알림 확인
+            alerts = self.dividend_alert_monitor.check_price_alerts()
+            
+            for msg in alerts:
+                 await dividend_bot.send_news(msg)
+                 logger.info(f"배당 가격 알림 발송: {msg.splitlines()[0]}")
+                 
+        except Exception as e:
+            logger.error(f"배당 가격 알림 체크 오류: {e}")
+
+    async def check_dividend_news_alerts(self):
+        """
+        배당 포트폴리오 뉴스 알림 (1시간 간격)
+        """
+        try:
+             # 배당 채널 봇 인스턴스 생성
+            from config import TELEGRAM_BOT_TOKEN, DIVIDEND_CHANNEL_ID
+            target_channel = DIVIDEND_CHANNEL_ID if DIVIDEND_CHANNEL_ID else CHANNEL_ID
+            dividend_bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, target_channel)
+
+            # 뉴스 알림 확인
+            alerts = self.dividend_alert_monitor.check_news_alerts()
+            
+            for msg in alerts:
+                 await dividend_bot.send_news(msg)
+                 logger.info(f"배당 뉴스 알림 발송: {msg.splitlines()[0]}")
+
+        except Exception as e:
+            logger.error(f"배당 뉴스 알림 체크 오류: {e}")
+
+    async def send_dividend_closing_briefing(self, force: bool = False):
+        """
+        배당 포트폴리오 마감 브리핑 (장 마감 후)
+        """
+        try:
+            if not force and self._check_briefing_sent("dividend_closing"):
+                logger.info("배당 마감 브리핑 스킵 (이미 발송됨)")
+                return
+
+            # 배당 채널 봇 인스턴스 생성
+            from config import TELEGRAM_BOT_TOKEN, DIVIDEND_CHANNEL_ID
+            target_channel = DIVIDEND_CHANNEL_ID if DIVIDEND_CHANNEL_ID else CHANNEL_ID
+            dividend_bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, target_channel)
+
+            msg = self.dividend_alert_monitor.format_closing_briefing()
+            await dividend_bot.send_news(msg)
+            logger.info("배당 마감 브리핑 발송 완료")
+            
+            self._mark_briefing_sent("dividend_closing")
+
+        except Exception as e:
+            logger.error(f"배당 마감 브리핑 오류: {e}")
+
     async def check_tqbus_crossover(self):
         """
         TQ버스 이평선 돌파 체크 (5분마다 체크, 하루 1회만 알림)
@@ -575,6 +680,50 @@ class NewsScheduler:
                 day_of_week=0,  # Monday
                 id='send_dividend_report',
                 name='배당주 리포트',
+                replace_existing=True
+            )
+
+            # 배당 브리핑 (09:00 KST, 화~토 = 미국 장 다음날)
+            self.scheduler.add_job(
+                self.send_dividend_briefing,
+                'cron',
+                hour=9,
+                minute=0,
+                day_of_week='tue-sat',
+                id='dividend_briefing',
+                name='배당 브리핑',
+                replace_existing=True
+            )
+
+            # 배당 가격 알림 (5분 간격)
+            self.scheduler.add_job(
+                self.check_dividend_price_alerts,
+                'interval',
+                seconds=STOCK_CHECK_INTERVAL,
+                id='dividend_price_alert',
+                name='배당 가격 알림',
+                replace_existing=True
+            )
+
+            # 배당 뉴스 알림 (1시간 간격)
+            self.scheduler.add_job(
+                self.check_dividend_news_alerts,
+                'interval',
+                minutes=60,
+                id='dividend_news_alert',
+                name='배당 뉴스 알림',
+                replace_existing=True
+            )
+
+            # 배당 마감 브리핑 (09:05 KST - 기존 배당 브리핑 직후)
+            self.scheduler.add_job(
+                self.send_dividend_closing_briefing,
+                'cron',
+                hour=9,
+                minute=5,
+                day_of_week='tue-sat',
+                id='dividend_closing_briefing',
+                name='배당 마감 브리핑',
                 replace_existing=True
             )
 
