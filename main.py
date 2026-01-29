@@ -20,6 +20,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+
+async def trigger_dividend(request):
+    """배당주 리포트 수동 트리거"""
+    global _scheduler_instance
+    if _scheduler_instance:
+        await _scheduler_instance.send_dividend_report()
+        return web.Response(text='배당주 리포트 전송 완료')
+    return web.Response(text='Scheduler not initialized', status=500)
+
 async def health_check(request):
     """Health check endpoint for Render"""
     return web.Response(text="TeleBot is running!")
@@ -134,6 +143,7 @@ async def main():
     app.router.add_get('/trigger/morning', trigger_morning)
     app.router.add_get('/trigger/afternoon', trigger_afternoon)
     app.router.add_get('/trigger/fg', trigger_fg)
+    app.router.add_get('/trigger/dividend', trigger_dividend)
 
     port = int(os.environ.get('PORT', 10000))
     logger.info(f"HTTP 서버 시작 (포트: {port})")
