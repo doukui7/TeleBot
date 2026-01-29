@@ -285,6 +285,9 @@ class NewsScheduler:
                 else:
                     logger.error("주가 변동 알림 발송 실패")
 
+            # 배당주 리스트 별도 체크 (SCHD, VYM, HDV, JEPI, JEPQ, DIVO, O)
+            await self._check_dividend_stocks()
+
         except Exception as e:
             logger.error(f"주가 변동 체크 오류: {e}")
 
@@ -333,6 +336,21 @@ class NewsScheduler:
             self._mark_briefing_sent("morning")
             logger.info("오전 브리핑 발송 완료")
 
+            # 배당주 채널로도 동일한 내용 전송
+            try:
+                if fg_data:
+                    msg = self.fear_greed_tracker.format_text_message(fg_data)
+                    await self.dividend_bot.send_news(msg)
+                if us_data:
+                    msg = self.naver_tracker.format_text_message(us_data)
+                    await self.dividend_bot.send_news(msg)
+                if etf_data:
+                    etf_msg = self.etf_tracker.format_etf_report(etf_data)
+                    await self.dividend_bot.send_news(etf_msg)
+                logger.info("배당주 채널 오전 브리핑 발송 완료")
+            except Exception as div_err:
+                logger.error(f"배당주 채널 오전 브리핑 오류: {div_err}")
+
         except Exception as e:
             logger.error(f"오전 브리핑 발송 오류: {e}")
 
@@ -364,7 +382,20 @@ class NewsScheduler:
             # 발송 완료 기록 (Redis)
             self._mark_briefing_sent("afternoon")
             logger.info("오후 브리핑 발송 완료")
-
+            # 배당주 채널로도 동일한 내용 전송
+            try:
+                if fg_data:
+                    msg = self.fear_greed_tracker.format_text_message(fg_data)
+                    await self.dividend_bot.send_news(msg)
+                if us_data:
+                    msg = self.naver_tracker.format_text_message(us_data)
+                    await self.dividend_bot.send_news(msg)
+                if etf_data:
+                    etf_msg = self.etf_tracker.format_etf_report(etf_data)
+                    await self.dividend_bot.send_news(etf_msg)
+                logger.info("배당주 채널 오전 브리핑 발송 완료")
+            except Exception as div_err:
+                logger.error(f"배당주 채널 오전 브리핑 오류: {div_err}")
         except Exception as e:
             logger.error(f"오후 브리핑 발송 오류: {e}")
 
@@ -389,7 +420,40 @@ class NewsScheduler:
         except Exception as e:
             logger.error(f'배당주 리포트 전송 오류: {e}')
 
-async def send_tqbus_status(self, force: bool = False):
+
+    async def _check_dividend_stocks(self):
+        """
+        배당주 리스트 가격 변동 체크 (SCHD, VYM, HDV, JEPI, JEPQ, DIVO, O)
+        배당주 채널로만 알림 전송
+        """
+        try:
+            # 배당주 심볼 리스트
+            dividend_symbols = list(self.dividend_monitor.DIVIDEND_ETFS.keys())
+            
+            # 배당주만 체크
+            alerts = self.stock_monitor.check_symbols(dividend_symbols)
+            
+            if not alerts:
+                return
+            
+            # 중복 필터링 (DIV_ 접두사로 기존 채널과 분리)
+            new_alerts = []
+            for alert in alerts:
+                current_level = self._get_threshold_level(alert.change_percent, alert.category)
+                if not self._check_alert_exists(f"DIV_{alert.symbol}", current_level):
+                    new_alerts.append(alert)
+                    self._save_alert_record(f"DIV_{alert.symbol}", current_level)
+            
+            if new_alerts:
+                message = self.stock_monitor.format_alert_message(new_alerts)
+                if message:
+                    await self.dividend_bot.send_news(message)
+                    logger.info(f"배당주 가격 변동 알림 발송 ({len(new_alerts)}개)")
+        
+        except Exception as e:
+            logger.error(f"배당주 가격 변동 체크 오류: {e}")
+
+ async def send_tqbus_status(self, force: bool = False):
         """
         TQ버스 현재 상태 발송 (18:00 KST)
 
