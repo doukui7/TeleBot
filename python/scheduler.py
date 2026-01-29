@@ -12,7 +12,7 @@ import json
 import os
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from config import TELEGRAM_BOT_TOKEN, CHANNEL_ID, STOCK_CHECK_INTERVAL, UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN, get_us_market_close_time_kst
+from config import TELEGRAM_BOT_TOKEN, CHANNEL_ID, DIVIDEND_CHANNEL_ID, STOCK_CHECK_INTERVAL, UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN, get_us_market_close_time_kst
 from telegram_bot import NewsChannelBot
 from stock_monitor import StockMonitor
 from market_holidays import is_us_market_holiday
@@ -20,6 +20,7 @@ from fear_greed_tracker import FearGreedTracker, NaverFinanceTracker
 from etf_tracker import ETFTracker
 from etf_table_generator import ETFTableGenerator
 from tqbus_tracker import TqBusTracker
+from dividend_monitor import DividendMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,8 @@ class NewsScheduler:
     def __init__(self):
         self.scheduler = AsyncIOScheduler()
         self.bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, CHANNEL_ID)
+        self.dividend_bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, DIVIDEND_CHANNEL_ID)
+        self.dividend_monitor = DividendMonitor()
         self.stock_monitor = StockMonitor()
         self.fear_greed_tracker = FearGreedTracker()
         self.naver_tracker = NaverFinanceTracker()
@@ -365,7 +368,28 @@ class NewsScheduler:
         except Exception as e:
             logger.error(f"오후 브리핑 발송 오류: {e}")
 
-    async def send_tqbus_status(self, force: bool = False):
+    
+    async def send_dividend_report(self):
+        try:
+            logger.info('배당주 리포트 전송 시작')
+            
+            # 배당 데이터 수집
+            dividend_data = await self.dividend_monitor.fetch_dividend_data()
+            
+            if dividend_data:
+                # 배당 정보 포맷팅
+                message = await self.dividend_monitor.format_dividend_briefing(dividend_data)
+                
+                # 배당 채널로 전송
+                await self.dividend_bot.send_news(message, parse_mode='HTML')
+                logger.info('배당주 리포트 전송 완료')
+            else:
+                logger.warning('배당 데이터 수집 실패')
+                
+        except Exception as e:
+            logger.error(f'배당주 리포트 전송 오류: {e}')
+
+async def send_tqbus_status(self, force: bool = False):
         """
         TQ버스 현재 상태 발송 (18:00 KST)
 
@@ -478,6 +502,18 @@ class NewsScheduler:
                 replace_existing=True
             )
 
+            # 배당주 리포트 (매주 월요일 08:30 KST)
+            self.scheduler.add_job(
+                self.send_dividend_report,
+                'cron',
+                hour=8,
+                minute=30,
+                day_of_week=0,  # Monday
+                id='send_dividend_report',
+                name='배당주 리포트',
+                replace_existing=True
+            )
+
             self.scheduler.start()
             logger.info("스케줄러 시작 완료")
             logger.info(f"  - 주가 변동 알림 ({STOCK_CHECK_INTERVAL}초 간격)")
@@ -485,6 +521,7 @@ class NewsScheduler:
             logger.info("  - 오후 브리핑 (15:30 KST, 평일)")
             logger.info("  - TQ버스 상태 (18:00 KST, 화~토)")
             logger.info(f"  - TQ버스 돌파 체크 ({STOCK_CHECK_INTERVAL}초 간격)")
+            logger.info("  - 배당주 리포트 (매주 월요일 08:30 KST)")
 
         except Exception as e:
             logger.error(f"스케줄러 시작 오류: {e}")
