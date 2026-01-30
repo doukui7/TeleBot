@@ -22,6 +22,9 @@
 
 | 날짜 | 버전 | 변경 내용 | 관련 파일 |
 |------|------|----------|----------|
+| 2026-01-31 | 1.2.2 | 비트코인 변동률 롤링24h→당일시가 기준으로 변경 | `python/stock_monitor.py` |
+| 2026-01-31 | 1.2.2 | 주말 판단 한국시간→미국동부시간 기준으로 변경 | `python/scheduler.py` |
+| 2026-01-31 | 1.2.2 | Python 3.8 호환성 위해 multitasking==0.0.9 고정 | `requirements.txt` |
 | 2025-01-26 | 1.0.1 | GitHub 저장소 생성 (TeleBot) | - |
 | 2025-01-26 | 1.0.0 | 프로젝트 초기 생성 (web에서 분리) | 전체 |
 | 2025-01-26 | 1.0.0 | 시장 브리핑 기능 구현 | `src/services/briefing.ts` |
@@ -32,7 +35,78 @@
 
 ## 에러 수정 기록
 
-### 1. [해결됨] RSS 피드 중복 뉴스 문제
+### 1. [해결됨] 비트코인 변동률 불일치 (2026-01-31)
+
+**증상:**
+- 비트코인 변동률이 바이낸스 앱과 다르게 표시됨
+
+**원인:**
+- Binance `ticker/24hr` API의 `prevClosePrice`는 롤링 24시간 기준
+- 바이낸스 앱은 UTC 00:00 (한국시간 09:00) 기준 당일 시가 사용
+
+**해결책:**
+```python
+# 기존: 롤링 24시간
+url = 'https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT'
+previous_close = float(data.get('prevClosePrice', 0))
+
+# 변경: Klines API로 당일 시가 조회
+klines_url = 'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=1'
+today_open = float(klines[0][1])  # 당일 시가 = 전일 종가
+```
+
+**관련 파일:**
+- `python/stock_monitor.py`
+
+---
+
+### 2. [해결됨] 주말 판단 오류로 ETF 알림 미발송 (2026-01-31)
+
+**증상:**
+- 한국시간 토요일 새벽 (미국 금요일 장중)에 ETF 알림이 안 옴
+- 주말 모드로 BTC/나스닥 선물만 체크됨
+
+**원인:**
+- 주말 판단을 한국 시간 기준으로 함
+- 한국 토요일 02:00 = 미국 금요일 12:00 (장중)
+
+**해결책:**
+```python
+# 기존: 한국 시간 기준
+is_weekend = datetime.now().weekday() >= 5
+
+# 변경: 미국 동부시간 기준
+import pytz
+us_eastern = pytz.timezone('America/New_York')
+us_now = datetime.now(us_eastern)
+is_weekend = us_now.weekday() >= 5
+```
+
+**관련 파일:**
+- `python/scheduler.py`
+
+---
+
+### 3. [해결됨] Python 3.8 호환성 에러 (2026-01-31)
+
+**증상:**
+- Render 배포 시 `TypeError: 'type' object is not subscriptable`
+
+**원인:**
+- `multitasking` 최신 버전이 `type[Thread]` 문법 사용 (Python 3.9+ 전용)
+
+**해결책:**
+```
+# requirements.txt
+multitasking==0.0.9  # Pin for Python 3.8 compatibility
+```
+
+**관련 파일:**
+- `requirements.txt`
+
+---
+
+### 4. [해결됨] RSS 피드 중복 뉴스 문제
 
 **날짜**: 2025-01-26 (web 프로젝트에서 이관)
 
@@ -297,4 +371,4 @@ for (const user of users) {
 ---
 
 > **참고:** 새로운 에러나 기능 추가 시 이 문서를 업데이트하세요.
-> 마지막 업데이트: 2025-01-26
+> 마지막 업데이트: 2026-01-31
