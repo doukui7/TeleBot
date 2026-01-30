@@ -251,15 +251,46 @@ class NaverFinanceTracker:
         msg += f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         return msg
 
+    def _get_ytd_start_price(self, yahoo_symbol: str) -> float:
+        """Yahoo Finance에서 연초 시작가 가져오기"""
+        try:
+            url = f'https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}'
+            params = {'interval': '1d', 'range': '1y'}
+            response = requests.get(url, params=params, headers=self._headers, timeout=10)
+
+            if response.status_code != 200:
+                return None
+
+            data = response.json()
+            result = data.get('chart', {}).get('result', [])
+
+            if not result:
+                return None
+
+            timestamps = result[0].get('timestamp', [])
+            closes = result[0].get('indicators', {}).get('quote', [{}])[0].get('close', [])
+
+            # 올해 첫 거래일 찾기
+            year_start = datetime(datetime.now().year, 1, 1).timestamp()
+
+            for i, ts in enumerate(timestamps):
+                if ts >= year_start and closes[i] is not None:
+                    return closes[i]
+
+            return None
+        except Exception as e:
+            logger.warning(f"YTD 데이터 조회 실패 ({yahoo_symbol}): {e}")
+            return None
+
     def fetch_kr_market_data(self):
-        """한국 시장 데이터 가져오기 (네이버 증권 API - 실시간)"""
+        """한국 시장 데이터 가져오기 (네이버 증권 API - 실시간 + YTD)"""
         kr_indices = [
-            ('KOSPI', '코스피'),
-            ('KOSDAQ', '코스닥'),
+            ('KOSPI', '코스피', '^KS11'),
+            ('KOSDAQ', '코스닥', '^KQ11'),
         ]
         results = []
 
-        for symbol, name in kr_indices:
+        for symbol, name, yahoo_symbol in kr_indices:
             try:
                 url = f'https://m.stock.naver.com/api/index/{symbol}/basic'
                 response = requests.get(url, headers=self._headers, timeout=10)
@@ -284,14 +315,21 @@ class NaverFinanceTracker:
                 # 변동률
                 change_pct = (change / prev_close) * 100 if prev_close != 0 else 0
 
+                # YTD 계산
+                ytd_start = self._get_ytd_start_price(yahoo_symbol)
+                ytd_pct = None
+                if ytd_start and ytd_start > 0:
+                    ytd_pct = ((price - ytd_start) / ytd_start) * 100
+
                 results.append({
                     'name': name,
                     'price': price,
                     'change': change,
-                    'change_pct': change_pct
+                    'change_pct': change_pct,
+                    'ytd_pct': ytd_pct
                 })
 
-                logger.debug(f"{name}(네이버): 현재가 {price}, 전일대비 {change:+.2f} ({change_pct:+.2f}%)")
+                logger.debug(f"{name}(네이버): 현재가 {price}, 전일대비 {change:+.2f} ({change_pct:+.2f}%), YTD {ytd_pct:+.2f}%" if ytd_pct else f"{name}: YTD 없음")
 
             except Exception as e:
                 logger.warning(f"{name} 네이버 API 오류: {e}")
@@ -299,7 +337,7 @@ class NaverFinanceTracker:
         return results
 
     def format_kr_text_message(self, data):
-        """한국 증시 텍스트 메시지 생성"""
+        """한국 증시 텍스트 메시지 생성 (YTD 포함)"""
         if not data:
             return None
 
@@ -307,9 +345,16 @@ class NaverFinanceTracker:
 
         for item in data:
             arrow = '🔺' if item['change'] >= 0 else '🔻'
-            color_sign = '+' if item['change'] >= 0 else ''
+            sign = '+' if item['change'] >= 0 else ''
             msg += f"{arrow} <b>{item['name']}</b>\n"
-            msg += f"   {item['price']:,.2f} ({color_sign}{item['change_pct']:.2f}%)\n\n"
+            msg += f"   {item['price']:,.2f} ({sign}{item['change_pct']:.2f}%)"
+
+            # YTD 추가
+            if item.get('ytd_pct') is not None:
+                ytd_sign = '+' if item['ytd_pct'] >= 0 else ''
+                msg += f" | YTD {ytd_sign}{item['ytd_pct']:.1f}%"
+
+            msg += "\n\n"
 
         msg += f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         return msg
