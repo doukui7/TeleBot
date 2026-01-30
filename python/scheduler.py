@@ -4,7 +4,7 @@
 기능:
 - 주가 변동 알림 (5분마다)
 - 오전 브리핑 (08:00 KST) - Fear & Greed + 미국 증시
-- 오후 브리핑 (15:30 KST) - 한국 증시
+- 오후 브리핑 (15:40 KST) - 한국 증시
 """
 import logging
 import asyncio
@@ -358,7 +358,7 @@ class NewsScheduler:
 
     async def send_afternoon_briefing(self, force: bool = False):
         """
-        오후 브리핑 발송 (15:30 KST)
+        오후 브리핑 발송 (15:40 KST)
         - 한국 증시 스크린샷
 
         Args:
@@ -633,12 +633,12 @@ class NewsScheduler:
                 replace_existing=True
             )
 
-            # 오후 브리핑 (15:30 KST, 평일만)
+            # 오후 브리핑 (15:40 KST, 평일만 - 장마감 10분 후)
             self.scheduler.add_job(
                 self.send_afternoon_briefing,
                 'cron',
                 hour=15,
-                minute=30,
+                minute=40,
                 day_of_week='mon-fri',
                 id='afternoon_briefing',
                 name='오후 브리핑',
@@ -727,7 +727,7 @@ class NewsScheduler:
             logger.info("스케줄러 시작 완료")
             logger.info(f"  - 주가 변동 알림 ({STOCK_CHECK_INTERVAL}초 간격)")
             logger.info(f"  - 오전 브리핑 ({briefing_hour:02d}:{briefing_minute:02d} KST, 화~토 = 미국 장마감 후)")
-            logger.info("  - 오후 브리핑 (15:30 KST, 평일)")
+            logger.info("  - 오후 브리핑 (15:40 KST, 평일)")
             logger.info("  - TQ버스 상태 (18:00 KST, 화~토)")
             logger.info(f"  - TQ버스 돌파 체크 ({STOCK_CHECK_INTERVAL}초 간격)")
             logger.info("  - 배당주 리포트 (매주 월요일 08:30 KST)")

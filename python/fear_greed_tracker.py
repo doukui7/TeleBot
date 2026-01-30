@@ -252,45 +252,36 @@ class NaverFinanceTracker:
         return msg
 
     def fetch_kr_market_data(self):
-        """한국 시장 데이터 가져오기 (Yahoo Finance)"""
+        """한국 시장 데이터 가져오기 (네이버 증권 API - 실시간)"""
         kr_indices = [
-            ('^KS11', '코스피'),
-            ('^KQ11', '코스닥'),
+            ('KOSPI', '코스피'),
+            ('KOSDAQ', '코스닥'),
         ]
         results = []
 
         for symbol, name in kr_indices:
             try:
-                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-                params = {"interval": "1d", "range": "5d"}
-
-                response = requests.get(url, params=params, headers=self._headers, timeout=10)
+                url = f'https://m.stock.naver.com/api/index/{symbol}/basic'
+                response = requests.get(url, headers=self._headers, timeout=10)
 
                 if response.status_code != 200:
+                    logger.warning(f"{name}: 네이버 API 오류 ({response.status_code})")
                     continue
 
                 data = response.json()
-                result = data.get("chart", {}).get("result", [])
 
-                if not result:
-                    continue
+                # 현재가 (쉼표 제거)
+                price_str = data.get('closePrice', '0').replace(',', '')
+                price = float(price_str)
 
-                meta = result[0].get("meta", {})
-                quotes = result[0].get("indicators", {}).get("quote", [{}])[0]
-                closes = quotes.get("close", [])
+                # 전일 대비 변동
+                change_str = data.get('compareToPreviousClosePrice', '0').replace(',', '')
+                change = float(change_str)
 
-                valid_closes = [c for c in closes if c is not None]
+                # 전일 종가 계산
+                prev_close = price - change
 
-                if len(valid_closes) >= 2:
-                    price = valid_closes[-1]
-                    prev_close = valid_closes[-2]
-                elif len(valid_closes) == 1:
-                    price = valid_closes[-1]
-                    prev_close = meta.get("chartPreviousClose", price)
-                else:
-                    continue
-
-                change = price - prev_close
+                # 변동률
                 change_pct = (change / prev_close) * 100 if prev_close != 0 else 0
 
                 results.append({
@@ -300,8 +291,10 @@ class NaverFinanceTracker:
                     'change_pct': change_pct
                 })
 
+                logger.debug(f"{name}(네이버): 현재가 {price}, 전일대비 {change:+.2f} ({change_pct:+.2f}%)")
+
             except Exception as e:
-                logger.warning(f"{name} 데이터 가져오기 실패: {e}")
+                logger.warning(f"{name} 네이버 API 오류: {e}")
 
         return results
 
