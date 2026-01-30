@@ -255,22 +255,41 @@ class StockMonitor:
             return None
 
     def get_bitcoin_realtime(self) -> Optional[Tuple[float, float]]:
-        """Binance API로 비트코인 실시간 데이터 가져오기"""
+        """
+        Binance API로 비트코인 실시간 데이터 가져오기
+        - UTC 00:00 (한국시간 09:00) 기준 당일 시가 대비 변동률 계산
+        - 당일 시가 = 전일 종가
+        """
         try:
-            url = 'https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT'
-            response = requests.get(url, timeout=10)
+            # 1. 현재가 조회
+            ticker_url = 'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT'
+            ticker_resp = requests.get(ticker_url, timeout=10)
 
-            if response.status_code != 200:
-                logger.warning(f"비트코인: Binance API 오류 ({response.status_code})")
+            if ticker_resp.status_code != 200:
+                logger.warning(f"비트코인: Binance ticker API 오류 ({ticker_resp.status_code})")
                 return None
 
-            data = response.json()
-            current_price = float(data.get('lastPrice', 0))
-            previous_close = float(data.get('prevClosePrice', 0))
+            current_price = float(ticker_resp.json().get('price', 0))
 
-            if current_price and previous_close:
-                logger.debug(f"비트코인(Binance): 현재가 {current_price}, 전일종가 {previous_close}")
-                return (current_price, previous_close)
+            # 2. 일별 캔들 데이터로 당일 시가 조회 (UTC 00:00 기준)
+            klines_url = 'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=1'
+            klines_resp = requests.get(klines_url, timeout=10)
+
+            if klines_resp.status_code != 200:
+                logger.warning(f"비트코인: Binance klines API 오류 ({klines_resp.status_code})")
+                return None
+
+            klines = klines_resp.json()
+            if not klines:
+                logger.warning("비트코인: klines 데이터 없음")
+                return None
+
+            # klines format: [open_time, open, high, low, close, volume, ...]
+            today_open = float(klines[0][1])  # 당일 시가 (= 전일 종가)
+
+            if current_price and today_open:
+                logger.debug(f"비트코인(Binance): 현재가 {current_price}, 당일시가 {today_open}")
+                return (current_price, today_open)
 
             return None
         except Exception as e:
