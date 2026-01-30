@@ -217,8 +217,11 @@ class NewsScheduler:
         - 주말: 나스닥 선물 + 비트코인만 체크
         """
         try:
-            # 주말 여부 확인
-            is_weekend = datetime.now().weekday() >= 5
+            # 주말 여부 확인 (미국 동부시간 기준)
+            import pytz
+            us_eastern = pytz.timezone('America/New_York')
+            us_now = datetime.now(us_eastern)
+            is_weekend = us_now.weekday() >= 5  # 미국 기준 토(5), 일(6)
 
             if is_weekend:
                 logger.info("주가 변동 체크 시작 (주말 모드: NQ선물 + BTC)...")
