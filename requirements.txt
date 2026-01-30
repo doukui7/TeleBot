@@ -27,3 +27,7 @@ colorlog>=6.7.0
 
 # Redis (Optional - Upstash)
 upstash-redis>=1.0.0
+
+# Financial Data
+yfinance>=0.2.0
+multitasking==0.0.9  # Pin for Python 3.8 compatibility
