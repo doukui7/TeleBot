@@ -384,20 +384,16 @@ class NewsScheduler:
             # 발송 완료 기록 (Redis)
             self._mark_briefing_sent("afternoon")
             logger.info("오후 브리핑 발송 완료")
-            # 배당주 채널로도 동일한 내용 전송
+
+            # 배당주 채널로도 한국 증시 전송
             try:
-                if fg_data:
-                    msg = self.fear_greed_tracker.format_text_message(fg_data)
+                if kr_data:
+                    msg = self.naver_tracker.format_kr_text_message(kr_data)
                     await self.dividend_bot.send_news(msg)
-                if us_data:
-                    msg = self.naver_tracker.format_text_message(us_data)
-                    await self.dividend_bot.send_news(msg)
-                if etf_data:
-                    etf_msg = self.etf_tracker.format_etf_report(etf_data)
-                    await self.dividend_bot.send_news(etf_msg)
-                logger.info("배당주 채널 오전 브리핑 발송 완료")
+                    logger.info("배당주 채널 오후 브리핑 발송 완료")
             except Exception as div_err:
-                logger.error(f"배당주 채널 오전 브리핑 오류: {div_err}")
+                logger.error(f"배당주 채널 오후 브리핑 오류: {div_err}")
+
         except Exception as e:
             logger.error(f"오후 브리핑 발송 오류: {e}")
 
