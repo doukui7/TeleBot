@@ -588,7 +588,7 @@ class StockMonitor:
             message += "\n"
 
         if etfs:
-            message += "⚡ <b>3x 레버리지 ETF (10% 이상 변동)</b>\n"
+            message += "⚡ <b>3x 레버리지 ETF (5% 이상 변동)</b>\n"
             for alert in etfs:
                 emoji = "📈" if alert.change_percent > 0 else "📉"
                 sign = "+" if alert.change_percent > 0 else ""
