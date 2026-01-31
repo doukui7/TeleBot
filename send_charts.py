@@ -5,18 +5,21 @@ import asyncio
 import sys
 import os
 
-# src 디렉토리 경로 추가
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+# 한글 인코딩 설정
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
 
-from src.market_chart_generator import MarketChartGenerator
-from src.etf_table_generator import ETFTableGenerator
-from src.etf_tracker import ETFTracker
-from src.telegram_bot import NewsChannelBot
-from src.config import TELEGRAM_BOT_TOKEN, CHANNEL_ID
+# python 디렉토리 경로 추가
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'python'))
+
+from python.etf_tracker import ETFTracker
+from python.telegram_bot import NewsChannelBot
+from python.config import TELEGRAM_BOT_TOKEN, CHANNEL_ID
+from python.advanced_etf_table_generator import AdvancedETFTableGenerator
 
 async def main():
     print("=" * 50)
-    print("차트 및 ETF 테이블 발송 시작")
+    print("Chart and ETF table sending started")
     print("=" * 50)
 
     # 텔레그램 봇 초기화
@@ -24,48 +27,32 @@ async def main():
 
     # 연결 확인
     if not await bot.check_connection():
-        print("봇 연결 실패!")
+        print("[FAIL] Bot connection failed!")
         return
 
-    # 1. 시장 차트 생성 및 발송
-    print("\n[1] 시장 차트 생성 중...")
-    chart_gen = MarketChartGenerator()
-    chart = chart_gen.create_market_chart()
-
-    if chart:
-        caption = "📊 시장 현황 차트 (1년)"
-        success = await bot.send_photo_buffer(chart, caption)
-        if success:
-            print("✅ 시장 차트 발송 완료")
-        else:
-            print("❌ 시장 차트 발송 실패")
-    else:
-        print("❌ 시장 차트 생성 실패")
-
-    # 2. ETF 테이블 생성 및 발송
-    print("\n[2] ETF 테이블 생성 중...")
+    # 1. 3배 ETF만 발송 (지수 제거)
+    print("\n[1] Creating 3X ETF message...")
     etf_tracker = ETFTracker()
     etf_data = etf_tracker.get_all_etf_data()
 
     if etf_data:
-        print(f"  - {len(etf_data)}개 ETF 데이터 수집 완료")
-
-        table_img = ETFTableGenerator.create_table_image(etf_data)
-
-        if table_img:
-            caption = "📋 3X ETF 리스트"
-            success = await bot.send_photo_buffer(table_img, caption)
-            if success:
-                print("✅ ETF 테이블 발송 완료")
-            else:
-                print("❌ ETF 테이블 발송 실패")
-        else:
-            print("❌ ETF 테이블 이미지 생성 실패")
+        print(f"  - {len(etf_data)} ETFs collected")
     else:
-        print("❌ ETF 데이터 수집 실패")
+        print("[WARN] ETF data collection failed")
+
+    etf_msg = AdvancedETFTableGenerator.create_etf_message(etf_data)
+
+    if etf_msg:
+        success = await bot.send_news(etf_msg)
+        if success:
+            print("[OK] 3X ETF message sent")
+        else:
+            print("[FAIL] 3X ETF message failed")
+    else:
+        print("[FAIL] 3X ETF message generation failed")
 
     print("\n" + "=" * 50)
-    print("발송 완료!")
+    print("Sending complete!")
     print("=" * 50)
 
 if __name__ == "__main__":

@@ -2,8 +2,8 @@
 자동 뉴스 발행, ETF 추적 및 주가 변동 알림 스케줄러
 
 기능:
-- 주가 변동 알림 (5분마다)
-- 오전 브리핑 (08:00 KST) - Fear & Greed + 미국 증시
+- 주가 변동 알림 (5분마다, 최소 10분 간격)
+- 오전 브리핑 (미국 장 마감 후 10분) - Fear & Greed + 미국 증시 + 3X ETF
 - 오후 브리핑 (15:40 KST) - 한국 증시
 """
 import logging
@@ -20,7 +20,7 @@ from fear_greed_tracker import FearGreedTracker, NaverFinanceTracker
 from etf_tracker import ETFTracker
 from etf_table_generator import ETFTableGenerator
 from tqbus_tracker import TqBusTracker
-from dividend_monitor import DividendMonitor, DividendAlertMonitor
+from dividend_monitor import DividendMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,8 @@ ALERT_HISTORY_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'aler
 # 알림 쿨다운 시간 (초) - 24시간
 ALERT_COOLDOWN_SECONDS = 24 * 60 * 60
 
-# 알림 최소 간격 (초) - 30분
-MIN_ALERT_INTERVAL_SECONDS = 30 * 60
+# 알림 최소 간격 (초) - 10분
+MIN_ALERT_INTERVAL_SECONDS = 10 * 60
 
 # 브리핑 쿨다운 시간 (초) - 12시간 (하루 1회 보장)
 BRIEFING_COOLDOWN_SECONDS = 12 * 60 * 60
@@ -65,7 +65,7 @@ class NewsScheduler:
         self.etf_table_generator = ETFTableGenerator()
         self.tqbus_tracker = TqBusTracker()
         self.dividend_monitor = DividendMonitor()
-        self.dividend_alert_monitor = DividendAlertMonitor()
+        # self.dividend_alert_monitor = DividendAlertMonitor()  # TODO: 클래스 구현 필요
         self.stock_alerted_today: dict = self._load_alert_history()
         self.last_alert_time: datetime = None  # 마지막 알림 발송 시간
 
@@ -186,12 +186,12 @@ class NewsScheduler:
         return self.last_alert_time  # 폴백: 메모리
 
     def _set_last_alert_time(self, dt: datetime):
-        """마지막 알림 발송 시간 저장 (Redis 기반, 1시간 TTL)"""
+        """마지막 알림 발송 시간 저장 (Redis 기반, 10분 TTL)"""
         self.last_alert_time = dt  # 메모리에도 저장
         if redis_client:
             try:
-                # 1시간 TTL (30분 간격 체크에 충분)
-                redis_client.setex(LAST_ALERT_TIME_KEY, 3600, dt.isoformat())
+                # 10분 TTL (10분 간격 체크에 충분)
+                redis_client.setex(LAST_ALERT_TIME_KEY, 600, dt.isoformat())
                 logger.info(f"Redis: 마지막 알림 시간 저장 ({dt.strftime('%H:%M:%S')})")
             except Exception as e:
                 logger.error(f"Redis 저장 오류 (last_alert_time): {e}")
@@ -251,14 +251,14 @@ class NewsScheduler:
                 logger.info("새로운 알림 없음 (24시간 내 중복 필터링)")
                 return
 
-            # 30분 최소 간격 체크 (Redis 기반)
+            # 10분 최소 간격 체크 (Redis 기반)
             now = datetime.now()
             last_time = self._get_last_alert_time()
             if last_time:
                 elapsed = (now - last_time).total_seconds()
                 if elapsed < MIN_ALERT_INTERVAL_SECONDS:
                     remaining = int((MIN_ALERT_INTERVAL_SECONDS - elapsed) / 60)
-                    logger.info(f"알림 발송 대기 중 (최소 간격 30분, {remaining}분 남음)")
+                    logger.info(f"알림 발송 대기 중 (최소 간격 10분, {remaining}분 남음)")
                     return
 
             # 파일 백업 저장 (Redis 미사용 시 폴백)
@@ -341,7 +341,7 @@ class NewsScheduler:
             self._mark_briefing_sent("morning")
             logger.info("오전 브리핑 발송 완료")
 
-            # 배당주 채널로도 동일한 내용 전송
+            # 배당주 채널로 Fear & Greed + 미국 증시만 전송 (3X ETF 제외)
             try:
                 if fg_data:
                     msg = self.fear_greed_tracker.format_text_message(fg_data)
@@ -349,10 +349,7 @@ class NewsScheduler:
                 if us_data:
                     msg = self.naver_tracker.format_text_message(us_data)
                     await self.dividend_bot.send_news(msg)
-                if etf_data:
-                    etf_msg = self.etf_tracker.format_etf_report(etf_data)
-                    await self.dividend_bot.send_news(etf_msg)
-                logger.info("배당주 채널 오전 브리핑 발송 완료")
+                logger.info("배당주 채널 오전 브리핑 발송 완료 (Fear & Greed + 미국 증시)")
             except Exception as div_err:
                 logger.error(f"배당주 채널 오전 브리핑 오류: {div_err}")
 
@@ -530,12 +527,12 @@ class NewsScheduler:
             target_channel = DIVIDEND_CHANNEL_ID if DIVIDEND_CHANNEL_ID else CHANNEL_ID
             dividend_bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, target_channel)
 
-            # 가격 알림 확인
-            alerts = self.dividend_alert_monitor.check_price_alerts()
-            
-            for msg in alerts:
-                 await dividend_bot.send_news(msg)
-                 logger.info(f"배당 가격 알림 발송: {msg.splitlines()[0]}")
+            # 가격 알림 확인 - TODO: DividendAlertMonitor 구현 필요
+            # alerts = self.dividend_alert_monitor.check_price_alerts()
+            # for msg in alerts:
+            #      await dividend_bot.send_news(msg)
+            #      logger.info(f"배당 가격 알림 발송: {msg.splitlines()[0]}")
+            pass
                  
         except Exception as e:
             logger.error(f"배당 가격 알림 체크 오류: {e}")
@@ -550,12 +547,12 @@ class NewsScheduler:
             target_channel = DIVIDEND_CHANNEL_ID if DIVIDEND_CHANNEL_ID else CHANNEL_ID
             dividend_bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, target_channel)
 
-            # 뉴스 알림 확인
-            alerts = self.dividend_alert_monitor.check_news_alerts()
-            
-            for msg in alerts:
-                 await dividend_bot.send_news(msg)
-                 logger.info(f"배당 뉴스 알림 발송: {msg.splitlines()[0]}")
+            # 뉴스 알림 확인 - TODO: DividendAlertMonitor 구현 필요
+            # alerts = self.dividend_alert_monitor.check_news_alerts()
+            # for msg in alerts:
+            #      await dividend_bot.send_news(msg)
+            #      logger.info(f"배당 뉴스 알림 발송: {msg.splitlines()[0]}")
+            pass
 
         except Exception as e:
             logger.error(f"배당 뉴스 알림 체크 오류: {e}")
@@ -574,9 +571,10 @@ class NewsScheduler:
             target_channel = DIVIDEND_CHANNEL_ID if DIVIDEND_CHANNEL_ID else CHANNEL_ID
             dividend_bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, target_channel)
 
-            msg = self.dividend_alert_monitor.format_closing_briefing()
-            await dividend_bot.send_news(msg)
-            logger.info("배당 마감 브리핑 발송 완료")
+            # TODO: DividendAlertMonitor 구현 필요
+            # msg = self.dividend_alert_monitor.format_closing_briefing()
+            # await dividend_bot.send_news(msg)
+            logger.info("배당 마감 브리핑 스킵 (DividendAlertMonitor 미구현)")
             
             self._mark_briefing_sent("dividend_closing")
 
@@ -620,11 +618,11 @@ class NewsScheduler:
                 replace_existing=True
             )
 
-            # 오전 브리핑 (미국 장 마감 후 30분, 평일만)
-            # 서머타임: 05:30 KST, 일반: 06:30 KST
-            close_hour, _ = get_us_market_close_time_kst()
+            # 오전 브리핑 (미국 장 마감 후 10분, 평일만)
+            # 서머타임: 05:10 KST, 일반: 06:10 KST
+            close_hour, close_minute = get_us_market_close_time_kst()
             briefing_hour = close_hour
-            briefing_minute = 30
+            briefing_minute = close_minute
             self.scheduler.add_job(
                 self.send_morning_briefing,
                 'cron',
@@ -632,11 +630,11 @@ class NewsScheduler:
                 minute=briefing_minute,
                 day_of_week='tue-sat',  # 미국 월~금 마감 = 한국 화~토
                 id='morning_briefing',
-                name='오전 브리핑 (장마감 후)',
+                name='오전 브리핑 (장마감 후 10분)',
                 replace_existing=True
             )
 
-            # 오후 브리핑 (15:40 KST, 평일만 - 장마감 10분 후)
+            # 오후 브리핑 (한국 장 마감 후 10분, 15:40 KST)
             self.scheduler.add_job(
                 self.send_afternoon_briefing,
                 'cron',
@@ -644,7 +642,7 @@ class NewsScheduler:
                 minute=40,
                 day_of_week='mon-fri',
                 id='afternoon_briefing',
-                name='오후 브리핑',
+                name='오후 브리핑 (한국 장마감 후 10분)',
                 replace_existing=True
             )
 
@@ -729,8 +727,8 @@ class NewsScheduler:
             self.scheduler.start()
             logger.info("스케줄러 시작 완료")
             logger.info(f"  - 주가 변동 알림 ({STOCK_CHECK_INTERVAL}초 간격)")
-            logger.info(f"  - 오전 브리핑 ({briefing_hour:02d}:{briefing_minute:02d} KST, 화~토 = 미국 장마감 후)")
-            logger.info("  - 오후 브리핑 (15:40 KST, 평일)")
+            logger.info(f"  - 오전 브리핑 ({briefing_hour:02d}:{briefing_minute:02d} KST, 화~토 = 미국 장마감 후 10분)")
+            logger.info("  - 오후 브리핑 (15:40 KST, 월~금 = 한국 장마감 후 10분)")
             logger.info("  - TQ버스 상태 (18:00 KST, 화~토)")
             logger.info(f"  - TQ버스 돌파 체크 ({STOCK_CHECK_INTERVAL}초 간격)")
             logger.info("  - 배당주 리포트 (매주 월요일 08:30 KST)")
