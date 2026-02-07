@@ -22,6 +22,10 @@
 
 | 날짜 | 버전 | 변경 내용 | 관련 파일 |
 |------|------|----------|----------|
+| 2026-02-07 | 1.3.0 | TQ버스 이평선 단계별 알림 구현 (±3%, ±5%, ±7%) | `python/tqbus_tracker.py`, `python/scheduler.py` |
+| 2026-02-07 | 1.3.0 | 승차/하차 알림을 종가 기준으로 변경 (미국 장 마감 시간) | `python/scheduler.py` |
+| 2026-02-07 | 1.3.0 | 주말 알림 IG Weekend Nasdaq으로 변경 | `python/scheduler.py`, `python/weekend_nasdaq_tracker.py` |
+| 2026-02-07 | 1.3.0 | 미국 확장 시장 시간대 체크 함수 추가 (프리+정규+애프터) | `python/market_holidays.py` |
 | 2026-01-31 | 1.2.2 | 비트코인 변동률 롤링24h→당일시가 기준으로 변경 | `python/stock_monitor.py` |
 | 2026-01-31 | 1.2.2 | 주말 판단 한국시간→미국동부시간 기준으로 변경 | `python/scheduler.py` |
 | 2026-01-31 | 1.2.2 | Python 3.8 호환성 위해 multitasking==0.0.9 고정 | `requirements.txt` |
@@ -106,7 +110,37 @@ multitasking==0.0.9  # Pin for Python 3.8 compatibility
 
 ---
 
-### 4. [해결됨] RSS 피드 중복 뉴스 문제
+### 4. [해결됨] 주말 나스닥 선물 알림 오류 (2026-02-07)
+
+**증상:**
+- 토요일에 Yahoo Finance 나스닥 선물(NQ=F) 알림이 발송됨
+- 주말 전용 지수 대신 일반 선물 체크
+
+**원인:**
+- `stock_monitor.check_weekend()`가 Yahoo Finance의 NQ=F를 체크
+- 주말에는 IG Weekend US Tech 100을 사용해야 함
+
+**해결책:**
+```python
+# 기존: 나스닥 선물 체크
+if is_weekend:
+    alerts = self.stock_monitor.check_weekend()  # NQ=F 체크
+
+# 변경: Weekend Nasdaq 체크
+if is_weekend:
+    weekend_data = await self.weekend_nasdaq_tracker.fetch_price_data()
+    if self.weekend_nasdaq_tracker.should_alert(weekend_data):
+        msg = self.weekend_nasdaq_tracker.format_alert_message(weekend_data)
+        await self.bot.send_news(msg)
+```
+
+**관련 파일:**
+- `python/scheduler.py`
+- `python/weekend_nasdaq_tracker.py`
+
+---
+
+### 5. [해결됨] RSS 피드 중복 뉴스 문제
 
 **날짜**: 2025-01-26 (web 프로젝트에서 이관)
 
@@ -190,7 +224,48 @@ await sendMessage({
 
 ## 기능 추가 기록
 
-### 1. 시장 브리핑 (v1.0.0)
+### 1. TQ버스 이평선 알림 시스템 (v1.3.0)
+
+**날짜**: 2026-02-07
+
+**기능:**
+- TQQQ 193일 이동평균선 기반 단계별 알림
+- 6단계 레벨: +7%, +5%, +3%, -3%, -5%, -7%
+- 각 레벨당 하루 1회 발송 (Redis 중복 방지)
+- 실시간 가격 기준 (프리+정규+애프터 시간대)
+- 종가 기준 승차/하차 신호 (미국 장 마감 시간)
+
+**알림 종류:**
+1. **단계별 알림** (5분마다, 프리+정규+애프터)
+   - 이평선 위/아래 3%, 5%, 7% 이내 접근 시
+   - 평일만, 주말/휴장일 제외
+
+2. **승차/하차 알림** (종가 기준, 미국 장 마감)
+   - 상향 돌파: 승차 신호
+   - 하향 돌파: 하차 신호
+
+**구현:**
+```python
+# 단계별 레벨 판단
+if diff >= 7.0:
+    return 7.0  # +7% 레벨
+elif diff >= 5.0:
+    return 5.0  # +5% 레벨
+elif diff >= 3.0:
+    return 3.0  # +3% 레벨
+
+# Redis 키로 레벨별 중복 방지
+level_key = f"tqbus_alert_{alert_level:+.1f}"  # 예: tqbus_alert_+7.0
+```
+
+**관련 파일:**
+- `python/tqbus_tracker.py` - 레벨 로직 및 메시지 포맷
+- `python/scheduler.py` - 레벨별 알림 체크, 종가 기준 돌파 체크
+- `python/market_holidays.py` - 확장 시간대 체크 함수
+
+---
+
+### 2. 시장 브리핑 (v1.0.0)
 
 **날짜**: 2025-01-26
 
@@ -371,4 +446,4 @@ for (const user of users) {
 ---
 
 > **참고:** 새로운 에러나 기능 추가 시 이 문서를 업데이트하세요.
-> 마지막 업데이트: 2026-01-31
+> 마지막 업데이트: 2026-02-07
