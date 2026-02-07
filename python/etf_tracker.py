@@ -49,7 +49,6 @@ DEFAULT_ETF_LIST = [
     "NUGT",   # Direxion Gold Miners Bull 3X (금광주 3배)
     # 채권
     "TMF",    # Direxion Treasury Bull 3X (장기국채 3배)
-    "TYD",    # Direxion 7-10 Year Treasury Bull 3X (중기국채 3배)
 ]
 
 
@@ -116,21 +115,30 @@ class ETFTracker:
             else:
                 previous_close = current_price
 
-            # 52주 최고 종가 및 날짜 계산 (DD 계산용)
+            # 52주 최고 종가, 저가 및 날짜 계산
             high_52w_close = 0
+            low_52w_close = float('inf')
             high_52w_date = "N/A"
 
             for i, c in enumerate(closes):
-                if c is not None and c > high_52w_close:
-                    high_52w_close = c
-                    if i < len(timestamps):
-                        high_52w_date = datetime.fromtimestamp(timestamps[i]).strftime("%Y-%m-%d")
+                if c is not None:
+                    if c > high_52w_close:
+                        high_52w_close = c
+                        if i < len(timestamps):
+                            high_52w_date = datetime.fromtimestamp(timestamps[i]).strftime("%Y-%m-%d")
+                    if c < low_52w_close:
+                        low_52w_close = c
 
             if high_52w_close == 0:
                 high_52w_close = current_price
+            if low_52w_close == float('inf'):
+                low_52w_close = current_price
 
             # DD (52주 최고 종가 대비 현재 하락률)
             dd = ((current_price - high_52w_close) / high_52w_close) * 100 if high_52w_close > 0 else 0
+
+            # 52주 저가 대비 상승률
+            low_52w_change = ((current_price - low_52w_close) / low_52w_close) * 100 if low_52w_close > 0 else 0
 
             # 연초 대비 수익률 (YTD)
             ytd_return = 0
@@ -141,6 +149,13 @@ class ETFTracker:
                 if year_start_price > 0:
                     ytd_return = ((current_price - year_start_price) / year_start_price) * 100
 
+            # 월간 수익률 (최근 21 거래일)
+            monthly_return = 0
+            if len(valid_closes) > 21:
+                month_ago_price = valid_closes[-22]
+                if month_ago_price > 0:
+                    monthly_return = ((current_price - month_ago_price) / month_ago_price) * 100
+
             # 전일 변동률
             daily_change = ((current_price - previous_close) / previous_close) * 100 if previous_close > 0 else 0
 
@@ -148,9 +163,12 @@ class ETFTracker:
                 "symbol": symbol,
                 "current_price": round(float(current_price), 2),
                 "high_52w": round(float(high_52w_close), 2),
+                "low_52w": round(float(low_52w_close), 2),
                 "high_52w_date": high_52w_date,
                 "dd": round(float(dd), 2),
+                "low_52w_change": round(float(low_52w_change), 2),
                 "ytd_return": round(float(ytd_return), 2),
+                "monthly_return": round(float(monthly_return), 2),
                 "daily_change": round(float(daily_change), 2),
                 "previous_close": round(float(previous_close), 2),
             }

@@ -15,7 +15,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from config import TELEGRAM_BOT_TOKEN, CHANNEL_ID, DIVIDEND_CHANNEL_ID, STOCK_CHECK_INTERVAL, UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN, get_us_market_close_time_kst
 from telegram_bot import NewsChannelBot
 from stock_monitor import StockMonitor
-from market_holidays import is_us_market_holiday
+from market_holidays import is_us_market_holiday, is_us_extended_market_hours
 from fear_greed_tracker import FearGreedTracker, NaverFinanceTracker
 from etf_tracker import ETFTracker
 from etf_table_generator import ETFTableGenerator
@@ -341,7 +341,7 @@ class NewsScheduler:
             self._mark_briefing_sent("morning")
             logger.info("오전 브리핑 발송 완료")
 
-            # 배당주 채널로 Fear & Greed + 미국 증시만 전송 (3X ETF 제외)
+            # 배당주 채널로 Fear & Greed + 미국 증시 + 3X ETF 전송
             try:
                 if fg_data:
                     msg = self.fear_greed_tracker.format_text_message(fg_data)
@@ -349,7 +349,9 @@ class NewsScheduler:
                 if us_data:
                     msg = self.naver_tracker.format_text_message(us_data)
                     await self.dividend_bot.send_news(msg)
-                logger.info("배당주 채널 오전 브리핑 발송 완료 (Fear & Greed + 미국 증시)")
+                if 'etf_msg' in locals() and etf_msg:
+                    await self.dividend_bot.send_news(etf_msg)
+                logger.info("배당주 채널 오전 브리핑 발송 완료 (Fear & Greed + 미국 증시 + 3X ETF)")
             except Exception as div_err:
                 logger.error(f"배당주 채널 오전 브리핑 오류: {div_err}")
 
@@ -583,7 +585,8 @@ class NewsScheduler:
 
     async def check_tqbus_crossover(self):
         """
-        TQ버스 이평선 돌파 체크 (5분마다 체크, 하루 1회만 알림)
+        TQ버스 이평선 돌파 체크 (종가 기준, 미국 장 마감 시간)
+        승차(상향 돌파) / 하차(하향 돌파) 신호
         """
         try:
             # 중복 발송 방지 (Redis)
@@ -602,6 +605,42 @@ class NewsScheduler:
 
         except Exception as e:
             logger.error(f"TQ버스 돌파 체크 오류: {e}")
+
+    async def check_tqbus_alert(self):
+        """
+        TQ버스 이평선 단계별 알림 (실시간 가격 기준, 프리+정규+애프터 시간대)
+        레벨: +7%, +5%, +3%, -3%, -5%, -7% (각 레벨당 하루 1회)
+        """
+        try:
+            # 주말 체크
+            if is_us_market_holiday():
+                return  # 주말 또는 휴장일
+
+            # 미국 확장 시간대(프리+정규+애프터) 체크
+            if not is_us_extended_market_hours():
+                return  # 장 시간 외
+
+            # 현재 알림 레벨 확인
+            alert_level = self.tqbus_tracker.should_alert()
+            if alert_level is None:
+                return  # 알림 범위 밖
+
+            # 레벨별 중복 발송 방지 (Redis)
+            level_key = f"tqbus_alert_{alert_level:+.1f}"  # 예: tqbus_alert_+7.0, tqbus_alert_-3.0
+            if self._check_briefing_sent(level_key):
+                return  # 해당 레벨 오늘 이미 발송됨
+
+            # 알림 메시지 생성 및 발송
+            msg = self.tqbus_tracker.format_alert_message(alert_level)
+            if msg:
+                await self.bot.send_news(msg)
+                logger.info(f"TQ버스 {alert_level:+.1f}% 레벨 알림 발송 완료")
+
+                # 발송 완료 기록 (Redis, 24시간 TTL)
+                self._mark_briefing_sent(level_key)
+
+        except Exception as e:
+            logger.error(f"TQ버스 알림 체크 오류: {e}")
 
     def start(self):
         """스케줄러 시작"""
@@ -628,7 +667,7 @@ class NewsScheduler:
                 'cron',
                 hour=briefing_hour,
                 minute=briefing_minute,
-                day_of_week='tue-sat',  # 미국 월~금 마감 = 한국 화~토
+                day_of_week='sat',  # 토요일만 발송
                 id='morning_briefing',
                 name='오전 브리핑 (장마감 후 10분)',
                 replace_existing=True
@@ -652,19 +691,33 @@ class NewsScheduler:
                 'cron',
                 hour=18,
                 minute=0,
-                day_of_week='tue-sat',
+                day_of_week='sat',
                 id='tqbus_status',
                 name='TQ버스 상태',
                 replace_existing=True
             )
 
-            # TQ버스 이평선 돌파 체크 (5분마다, 장중에만)
+            # TQ버스 이평선 돌파 체크 (미국 장 마감 시간, 종가 기준)
+            close_hour, close_minute = get_us_market_close_time_kst()
             self.scheduler.add_job(
                 self.check_tqbus_crossover,
+                'cron',
+                hour=close_hour,
+                minute=close_minute,
+                day_of_week='tue-sat',  # 미국 월~금 마감 = 한국 화~토
+                id='tqbus_crossover',
+                name='TQ버스 돌파 체크 (종가)',
+                replace_existing=True
+            )
+
+            # TQ버스 이평선 단계별 알림 (5분마다, 프리+정규+애프터)
+            # 레벨: +7%, +5%, +3%, -3%, -5%, -7%
+            self.scheduler.add_job(
+                self.check_tqbus_alert,
                 'interval',
                 seconds=STOCK_CHECK_INTERVAL,
-                id='tqbus_crossover',
-                name='TQ버스 돌파 체크',
+                id='tqbus_alert',
+                name='TQ버스 단계별 알림',
                 replace_existing=True
             )
 

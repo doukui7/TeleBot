@@ -29,25 +29,25 @@ UPDATE_INTERVAL = int(os.getenv('UPDATE_INTERVAL', '3600'))
 # 주가 모니터링 간격 (초) - 기본 5분
 STOCK_CHECK_INTERVAL = int(os.getenv('STOCK_CHECK_INTERVAL', '300'))
 
-# 미국 시장 장 마감 시간 자동 설정 (서머타임 고려)
+# 미국 시장 장 마감 시간 자동 설정 (서머타임 고려, +10분 여유)
 def get_us_market_close_time_kst():
     """
-    미국 시장 장 마감 시간을 한국 시간으로 변환
-    일반: EST 16:00 → KST 06:00 (다음날)
-    서머: EDT 16:00 → KST 05:00 (다음날)
+    미국 시장 장 마감 시간을 한국 시간으로 변환 (+10분 여유)
+    일반: EST 16:00 → KST 06:10 (다음날)
+    서머: EDT 16:00 → KST 05:10 (다음날)
     """
     ny_tz = pytz.timezone('America/New_York')
     now = datetime.now(ny_tz)
-    
+
     # 서머타임 확인
     is_dst = bool(now.dst())
-    
-    # 서머타임 기간: EDT 16:00 → KST 05:00
-    # 일반 기간: EST 16:00 → KST 06:00
+
+    # 서머타임 기간: EDT 16:00 → KST 05:10 (+10분)
+    # 일반 기간: EST 16:00 → KST 06:10 (+10분)
     if is_dst:
-        return (5, 0)  # 다음날 05:00 KST
+        return (5, 10)  # 다음날 05:10 KST
     else:
-        return (6, 0)  # 다음날 06:00 KST
+        return (6, 10)  # 다음날 06:10 KST
 
 # ETF 리포트 발송 시간
 ETF_REPORT_HOUR, ETF_REPORT_MINUTE = get_us_market_close_time_kst()

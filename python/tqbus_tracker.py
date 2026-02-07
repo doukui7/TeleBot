@@ -44,7 +44,8 @@ class TqBusTracker:
     """TQ버스 전략 추적 클래스"""
 
     SMA_PERIOD = 193
-    ALERT_THRESHOLD = 7.0  # SMA와 7% 이내로 가까워지면 알림
+    # 알림 레벨 (이평선과의 거리 %)
+    ALERT_THRESHOLDS = [7.0, 5.0, 3.0, -3.0, -5.0, -7.0]
 
     def __init__(self):
         self._headers = {
@@ -311,16 +312,52 @@ class TqBusTracker:
 
         return None
 
-    def should_alert(self) -> bool:
+    def get_current_alert_level(self) -> Optional[float]:
         """
-        승하차 준비 알림 필요 여부
-        가격이 SMA와 7% 이내로 가까워지면 True
+        현재 가격이 속한 알림 레벨 반환
+
+        Returns:
+            알림 레벨 (7.0, 5.0, 3.0, -3.0, -5.0, -7.0) 또는 None
         """
         status = self.get_current_status()
         if status is None:
-            return False
+            return None
 
-        return abs(status.diff_percent) <= self.ALERT_THRESHOLD
+        diff = status.diff_percent
+
+        # 양수 레벨 체크 (이평선 위)
+        if diff > 0:
+            # +7% 이상 → +7% 레벨
+            if diff >= 7.0:
+                return 7.0
+            # +5% ~ +7% → +5% 레벨
+            elif diff >= 5.0:
+                return 5.0
+            # +3% ~ +5% → +3% 레벨
+            elif diff >= 3.0:
+                return 3.0
+        # 음수 레벨 체크 (이평선 아래)
+        elif diff < 0:
+            # -7% 이하 → -7% 레벨
+            if diff <= -7.0:
+                return -7.0
+            # -5% ~ -7% → -5% 레벨
+            elif diff <= -5.0:
+                return -5.0
+            # -3% ~ -5% → -3% 레벨
+            elif diff <= -3.0:
+                return -3.0
+
+        return None
+
+    def should_alert(self) -> Optional[float]:
+        """
+        승하차 준비 알림 필요 여부
+
+        Returns:
+            알림 레벨 (7.0, 5.0, 3.0, -3.0, -5.0, -7.0) 또는 None
+        """
+        return self.get_current_alert_level()
 
     def detect_crossover(self) -> Optional[str]:
         """
@@ -448,9 +485,12 @@ class TqBusTracker:
 
         return message
 
-    def format_alert_message(self) -> Optional[str]:
+    def format_alert_message(self, level: float = None) -> Optional[str]:
         """
-        승하차 준비 알림 메시지 포맷
+        승하차 준비 알림 메시지 포맷 (레벨별)
+
+        Args:
+            level: 알림 레벨 (7.0, 5.0, 3.0, -3.0, -5.0, -7.0)
 
         Returns:
             알림 메시지 또는 None
@@ -459,25 +499,38 @@ class TqBusTracker:
         if status is None:
             return None
 
-        if abs(status.diff_percent) > self.ALERT_THRESHOLD:
-            return None  # 7% 이상 벗어나면 알림 안함
+        # 레벨이 지정되지 않았으면 현재 레벨 사용
+        if level is None:
+            level = self.get_current_alert_level()
 
-        # 승차 준비 or 하차 준비
-        if status.position == 'CASH' and status.diff_percent > 0:
-            alert_type = "🚌 승차 준비!"
-            alert_desc = "가격이 이평선을 상향 돌파하면 TQQQ 매수"
-        elif status.position == 'TQQQ' and status.diff_percent < 0:
-            alert_type = "🚏 하차 준비!"
-            alert_desc = "가격이 이평선을 하향 돌파하면 TQQQ 매도"
+        if level is None:
+            return None
+
+        # 레벨별 메시지 생성
+        level_int = int(abs(level))
+
+        if level > 0:
+            # 이평선 위
+            if status.position == 'CASH':
+                alert_type = f"🚌 승차 준비! (이평선 +{level_int}% 이내)"
+                alert_desc = f"가격이 이평선 위 {level_int}% 이내로 접근 중\n💡 상향 돌파 시 TQQQ 매수 신호"
+            else:
+                alert_type = f"⚠️ 주의! (이평선 +{level_int}% 이내)"
+                alert_desc = f"가격이 이평선 위 {level_int}% 이내로 하락 중\n💡 이평선 근처 접근 중 - 주의 필요"
         else:
-            alert_type = "⚠️ 주의 구간"
-            alert_desc = "가격이 이평선 근처에서 횡보 중"
+            # 이평선 아래
+            if status.position == 'TQQQ':
+                alert_type = f"🚏 하차 준비! (이평선 -{level_int}% 이내)"
+                alert_desc = f"가격이 이평선 아래 {level_int}% 이내로 하락 중\n💡 추가 하락 시 TQQQ 매도 신호"
+            else:
+                alert_type = f"⚠️ 주의! (이평선 -{level_int}% 이내)"
+                alert_desc = f"가격이 이평선 아래 {level_int}% 이내\n💡 이평선 아래 유지 중 - 관망 필요"
 
         message = f"<b>{alert_type}</b>\n\n"
-        message += f"TQQQ: ${status.tqqq_price}\n"
-        message += f"193 SMA: ${status.sma_193}\n"
-        message += f"차이: {status.diff_percent:+.2f}%\n\n"
-        message += f"💡 {alert_desc}"
+        message += f"TQQQ: <b>${status.tqqq_price}</b>\n"
+        message += f"193 SMA: <b>${status.sma_193}</b>\n"
+        message += f"차이: <b>{status.diff_percent:+.2f}%</b>\n\n"
+        message += f"{alert_desc}"
 
         return message
 

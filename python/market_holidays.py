@@ -217,3 +217,60 @@ def is_first_trading_day_of_week() -> bool:
                 return False
 
     return True
+
+
+def is_dst() -> bool:
+    """현재가 서머타임(DST)인지 확인"""
+    import pytz
+    from datetime import datetime
+
+    ny_tz = pytz.timezone('America/New_York')
+    now_et = datetime.now(ny_tz)
+    return bool(now_et.dst())
+
+
+def is_us_extended_market_hours() -> bool:
+    """
+    미국 주식 시장 확장 시간대(프리+정규+애프터)인지 확인 (한국 시간 기준)
+
+    미국 시간 (ET):
+    - 프리마켓: 04:00 - 09:30
+    - 정규장: 09:30 - 16:00
+    - 애프터마켓: 16:00 - 20:00
+    - 전체: 04:00 - 20:00 ET
+
+    한국 시간 (KST):
+    - 서머타임: 17:00 (전날) - 09:00 (당일)
+    - 일반: 18:00 (전날) - 10:00 (당일)
+
+    Returns:
+        bool: 확장 시간대이면 True
+    """
+    from datetime import datetime, timedelta
+    import pytz
+
+    # 한국 시간
+    kst = pytz.timezone('Asia/Seoul')
+    now_kst = datetime.now(kst)
+
+    # 서머타임 여부에 따라 시작/종료 시간 결정
+    dst = is_dst()
+
+    if dst:
+        # 서머타임: 17:00 (전날) - 09:00 (당일)
+        start_hour, end_hour = 17, 9
+    else:
+        # 일반: 18:00 (전날) - 10:00 (당일)
+        start_hour, end_hour = 18, 10
+
+    current_hour = now_kst.hour
+
+    # 17:00/18:00 ~ 23:59 (전날 저녁)
+    if current_hour >= start_hour:
+        return True
+
+    # 00:00 ~ 09:00/10:00 (당일 새벽)
+    if current_hour < end_hour:
+        return True
+
+    return False
