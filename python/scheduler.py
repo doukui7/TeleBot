@@ -21,6 +21,7 @@ from etf_tracker import ETFTracker
 from etf_table_generator import ETFTableGenerator
 from tqbus_tracker import TqBusTracker
 from dividend_monitor import DividendMonitor
+from weekend_nasdaq_tracker import WeekendNasdaqTracker
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ class NewsScheduler:
         self.etf_tracker = ETFTracker()
         self.etf_table_generator = ETFTableGenerator()
         self.tqbus_tracker = TqBusTracker()
+        self.weekend_nasdaq_tracker = WeekendNasdaqTracker()
         self.dividend_monitor = DividendMonitor()
         # self.dividend_alert_monitor = DividendAlertMonitor()  # TODO: 클래스 구현 필요
         self.stock_alerted_today: dict = self._load_alert_history()
@@ -224,8 +226,26 @@ class NewsScheduler:
             is_weekend = us_now.weekday() >= 5  # 미국 기준 토(5), 일(6)
 
             if is_weekend:
-                logger.info("주가 변동 체크 시작 (주말 모드: NQ선물 + BTC)...")
-                alerts = self.stock_monitor.check_weekend()
+                logger.info("주말 모드: Weekend Nasdaq + BTC 체크...")
+
+                # Weekend Nasdaq (IG US Tech 100) 체크
+                weekend_data = await self.weekend_nasdaq_tracker.fetch_price_data()
+                alerts = []
+
+                if weekend_data and self.weekend_nasdaq_tracker.should_alert(weekend_data, threshold=1.0):
+                    # Weekend Nasdaq 알림 발송
+                    msg = self.weekend_nasdaq_tracker.format_alert_message(weekend_data)
+                    if msg:
+                        await self.bot.send_news(msg)
+                        logger.info("Weekend Nasdaq 알림 발송 완료")
+
+                # 비트코인 체크
+                btc_alerts = self.stock_monitor.check_symbols(
+                    self.stock_monitor.CRYPTO,
+                    'crypto',
+                    self.stock_monitor.INDEX_THRESHOLD
+                )
+                alerts.extend(btc_alerts)
             else:
                 logger.info("주가 변동 체크 시작...")
                 alerts = self.stock_monitor.check_all()
