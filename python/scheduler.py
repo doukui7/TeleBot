@@ -423,20 +423,20 @@ class NewsScheduler:
     async def send_dividend_report(self):
         try:
             logger.info('배당주 리포트 전송 시작')
-            
-            # 배당 데이터 수집
-            dividend_data = await self.dividend_monitor.fetch_dividend_data()
-            
+
+            # 배당 데이터 수집 (동기 함수)
+            dividend_data = self.dividend_monitor.fetch_dividend_data()
+
             if dividend_data:
-                # 배당 정보 포맷팅
-                message = await self.dividend_monitor.format_dividend_briefing(dividend_data)
-                
+                # 배당 정보 포맷팅 (동기 함수)
+                message = self.dividend_monitor.format_dividend_briefing(dividend_data)
+
                 # 배당 채널로 전송
-                await self.dividend_bot.send_news(message, parse_mode='HTML')
+                await self.dividend_bot.send_news(message)
                 logger.info('배당주 리포트 전송 완료')
             else:
                 logger.warning('배당 데이터 수집 실패')
-                
+
         except Exception as e:
             logger.error(f'배당주 리포트 전송 오류: {e}')
 
@@ -511,25 +511,14 @@ class NewsScheduler:
 
             logger.info("배당 브리핑 발송 시작...")
 
-            # 배당 데이터 수집
+            # 배당 데이터 수집 (동기 함수)
             dividend_data = self.dividend_monitor.fetch_dividend_data()
             if dividend_data:
                 msg = self.dividend_monitor.format_dividend_briefing(dividend_data)
-                
-                # 배당 채널로 발송 (config.py의 DIVIDEND_CHANNEL_ID 사용 필요)
-                # 현재 NewsChannelBot은 기본 TOKEN/CHANNEL_ID만 사용하므로
-                # 배당 채널용 봇 인스턴스를 따로 생성하거나, send_news에 chat_id 인자를 추가해야 함.
-                # 편의상 기존 봇 인스턴스에 채널 ID만 바꿔서 호출 시도 (TelegramBot 클래스 수정 필요할 수 있음)
-                # 여기서는 NewsChannelBot이 단일 채널 고정이라 가정하고,
-                # 새로운 봇 인스턴스를 생성하여 배당 채널 ID를 주입.
-                from config import TELEGRAM_BOT_TOKEN, DIVIDEND_CHANNEL_ID
-                
-                # DIVIDEND_CHANNEL_ID가 설정되어 있으면 그쪽으로, 아니면 기본 채널로
-                target_channel = DIVIDEND_CHANNEL_ID if DIVIDEND_CHANNEL_ID else CHANNEL_ID
-                
-                dividend_bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, target_channel)
-                await dividend_bot.send_news(msg)
-                logger.info(f"배당 브리핑 발송 완료 (Target: {target_channel})")
+
+                # self.dividend_bot 사용 (DIVIDEND_CHANNEL_ID로 초기화됨)
+                await self.dividend_bot.send_news(msg)
+                logger.info(f"배당 브리핑 발송 완료 (Target: {DIVIDEND_CHANNEL_ID})")
             else:
                 logger.warning("배당 데이터 수집 실패 또는 데이터 없음")
 
@@ -544,18 +533,13 @@ class NewsScheduler:
         배당 포트폴리오 가격 변동 알림 (5분 간격)
         """
         try:
-             # 배당 채널 봇 인스턴스 생성
-            from config import TELEGRAM_BOT_TOKEN, DIVIDEND_CHANNEL_ID
-            target_channel = DIVIDEND_CHANNEL_ID if DIVIDEND_CHANNEL_ID else CHANNEL_ID
-            dividend_bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, target_channel)
-
             # 가격 알림 확인 - TODO: DividendAlertMonitor 구현 필요
             # alerts = self.dividend_alert_monitor.check_price_alerts()
             # for msg in alerts:
-            #      await dividend_bot.send_news(msg)
+            #      await self.dividend_bot.send_news(msg)
             #      logger.info(f"배당 가격 알림 발송: {msg.splitlines()[0]}")
             pass
-                 
+
         except Exception as e:
             logger.error(f"배당 가격 알림 체크 오류: {e}")
 
@@ -564,15 +548,10 @@ class NewsScheduler:
         배당 포트폴리오 뉴스 알림 (1시간 간격)
         """
         try:
-             # 배당 채널 봇 인스턴스 생성
-            from config import TELEGRAM_BOT_TOKEN, DIVIDEND_CHANNEL_ID
-            target_channel = DIVIDEND_CHANNEL_ID if DIVIDEND_CHANNEL_ID else CHANNEL_ID
-            dividend_bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, target_channel)
-
             # 뉴스 알림 확인 - TODO: DividendAlertMonitor 구현 필요
             # alerts = self.dividend_alert_monitor.check_news_alerts()
             # for msg in alerts:
-            #      await dividend_bot.send_news(msg)
+            #      await self.dividend_bot.send_news(msg)
             #      logger.info(f"배당 뉴스 알림 발송: {msg.splitlines()[0]}")
             pass
 
@@ -588,14 +567,9 @@ class NewsScheduler:
                 logger.info("배당 마감 브리핑 스킵 (이미 발송됨)")
                 return
 
-            # 배당 채널 봇 인스턴스 생성
-            from config import TELEGRAM_BOT_TOKEN, DIVIDEND_CHANNEL_ID
-            target_channel = DIVIDEND_CHANNEL_ID if DIVIDEND_CHANNEL_ID else CHANNEL_ID
-            dividend_bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, target_channel)
-
             # TODO: DividendAlertMonitor 구현 필요
             # msg = self.dividend_alert_monitor.format_closing_briefing()
-            # await dividend_bot.send_news(msg)
+            # await self.dividend_bot.send_news(msg)
             logger.info("배당 마감 브리핑 스킵 (DividendAlertMonitor 미구현)")
             
             self._mark_briefing_sent("dividend_closing")
@@ -687,7 +661,7 @@ class NewsScheduler:
                 'cron',
                 hour=briefing_hour,
                 minute=briefing_minute,
-                day_of_week='sat',  # 토요일만 발송
+                day_of_week='tue-sat',  # 미국 월~금 마감 = 한국 화~토
                 id='morning_briefing',
                 name='오전 브리핑 (장마감 후 10분)',
                 replace_existing=True
@@ -711,7 +685,7 @@ class NewsScheduler:
                 'cron',
                 hour=18,
                 minute=0,
-                day_of_week='sat',
+                day_of_week='tue-sat',  # 미국 월~금 = 한국 화~토
                 id='tqbus_status',
                 name='TQ버스 상태',
                 replace_existing=True
