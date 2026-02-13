@@ -78,6 +78,16 @@ async def trigger_dividend(request):
     return web.Response(text="Scheduler not ready", status=503)
 
 
+async def trigger_earnings(request):
+    """실적 일정 수동 트리거"""
+    global _scheduler_instance
+    if _scheduler_instance:
+        logger.info("수동 실적 일정 트리거됨 (force=True)")
+        await _scheduler_instance.send_earnings_calendar(force=True)
+        return web.Response(text="Earnings calendar sent!")
+    return web.Response(text="Scheduler not ready", status=503)
+
+
 async def send_test_briefing():
     """시작 시 테스트 브리핑 발송"""
     from fear_greed_tracker import FearGreedTracker, NaverFinanceTracker
@@ -146,6 +156,7 @@ async def main():
     app.router.add_get('/trigger/afternoon', trigger_afternoon)
     app.router.add_get('/trigger/fg', trigger_fg)
     app.router.add_get('/trigger/dividend', trigger_dividend)
+    app.router.add_get('/trigger/earnings', trigger_earnings)
 
     port = int(os.environ.get('PORT', 10000))
     logger.info(f"HTTP 서버 시작 (포트: {port})")

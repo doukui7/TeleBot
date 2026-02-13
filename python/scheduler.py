@@ -22,6 +22,7 @@ from etf_table_generator import ETFTableGenerator
 from tqbus_tracker import TqBusTracker
 from dividend_monitor import DividendMonitor
 from weekend_nasdaq_tracker import WeekendNasdaqTracker
+from earnings_monitor import EarningsMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,13 @@ class NewsScheduler:
     """주가 변동 알림 및 브리핑 스케줄러"""
 
     def __init__(self):
-        self.scheduler = AsyncIOScheduler()
+        self.scheduler = AsyncIOScheduler(
+            timezone='Asia/Seoul',
+            job_defaults={
+                'misfire_grace_time': 3600,  # 1시간 내 재시작 시 놓친 작업 실행
+                'coalesce': True  # 여러 번 놓친 실행을 1회로 합침
+            }
+        )
         self.bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, CHANNEL_ID)
         self.dividend_bot = NewsChannelBot(TELEGRAM_BOT_TOKEN, DIVIDEND_CHANNEL_ID)
         self.dividend_monitor = DividendMonitor()
@@ -67,6 +74,7 @@ class NewsScheduler:
         self.tqbus_tracker = TqBusTracker()
         self.weekend_nasdaq_tracker = WeekendNasdaqTracker()
         self.dividend_monitor = DividendMonitor()
+        self.earnings_monitor = EarningsMonitor()
         # self.dividend_alert_monitor = DividendAlertMonitor()  # TODO: 클래스 구현 필요
         self.stock_alerted_today: dict = self._load_alert_history()
         self.last_alert_time: datetime = None  # 마지막 알림 발송 시간
@@ -577,6 +585,58 @@ class NewsScheduler:
         except Exception as e:
             logger.error(f"배당 마감 브리핑 오류: {e}")
 
+    async def send_earnings_calendar(self, force: bool = False):
+        """
+        S&P 100 실적 발표 일정 발송 (08:00 KST, 화~토)
+        """
+        try:
+            if not force and self._check_briefing_sent("earnings_calendar"):
+                logger.info("실적 일정 스킵 (이미 발송됨)")
+                return
+
+            logger.info("S&P 100 실적 일정 발송 시작...")
+
+            earnings_data = self.earnings_monitor.fetch_weekly_earnings()
+            if earnings_data:
+                msg = self.earnings_monitor.format_weekly_earnings(earnings_data)
+                if msg:
+                    await self.dividend_bot.send_news(msg)
+                    logger.info(f"S&P 100 실적 일정 발송 완료 ({len(earnings_data)}개 종목)")
+                else:
+                    logger.info("이번 주 S&P 100 실적 발표 예정 없음")
+            else:
+                logger.info("이번 주 S&P 100 실적 발표 예정 없음")
+
+            self._mark_briefing_sent("earnings_calendar")
+
+        except Exception as e:
+            logger.error(f"실적 일정 발송 오류: {e}")
+
+    async def send_earnings_results(self, force: bool = False):
+        """
+        S&P 100 실적 발표 결과 발송 (장 마감 후, 화~토)
+        """
+        try:
+            if not force and self._check_briefing_sent("earnings_results"):
+                logger.info("실적 결과 스킵 (이미 발송됨)")
+                return
+
+            logger.info("S&P 100 실적 결과 발송 시작...")
+
+            results_data = self.earnings_monitor.fetch_earnings_results()
+            if results_data:
+                msg = self.earnings_monitor.format_earnings_results(results_data)
+                if msg:
+                    await self.dividend_bot.send_news(msg)
+                    logger.info(f"S&P 100 실적 결과 발송 완료 ({len(results_data)}개 종목)")
+            else:
+                logger.info("오늘 발표된 S&P 100 실적 없음")
+
+            self._mark_briefing_sent("earnings_results")
+
+        except Exception as e:
+            logger.error(f"실적 결과 발송 오류: {e}")
+
     async def check_tqbus_crossover(self):
         """
         TQ버스 이평선 돌파 체크 (종가 기준, 미국 장 마감 시간)
@@ -771,6 +831,30 @@ class NewsScheduler:
                 replace_existing=True
             )
 
+            # S&P 100 실적 일정 (08:00 KST, 화~토 = 미국 월~금)
+            self.scheduler.add_job(
+                self.send_earnings_calendar,
+                'cron',
+                hour=8,
+                minute=0,
+                day_of_week='tue-sat',
+                id='earnings_calendar',
+                name='S&P 100 실적 일정',
+                replace_existing=True
+            )
+
+            # S&P 100 실적 결과 (장마감 후 20분, 화~토)
+            self.scheduler.add_job(
+                self.send_earnings_results,
+                'cron',
+                hour=close_hour,
+                minute=close_minute + 10,
+                day_of_week='tue-sat',
+                id='earnings_results',
+                name='S&P 100 실적 결과',
+                replace_existing=True
+            )
+
             self.scheduler.start()
             logger.info("스케줄러 시작 완료")
             logger.info(f"  - 주가 변동 알림 ({STOCK_CHECK_INTERVAL}초 간격)")
@@ -779,6 +863,8 @@ class NewsScheduler:
             logger.info("  - TQ버스 상태 (18:00 KST, 화~토)")
             logger.info(f"  - TQ버스 돌파 체크 ({STOCK_CHECK_INTERVAL}초 간격)")
             logger.info("  - 배당주 리포트 (매주 월요일 08:30 KST)")
+            logger.info("  - S&P 100 실적 일정 (08:00 KST, 화~토)")
+            logger.info(f"  - S&P 100 실적 결과 ({close_hour}:{close_minute+10:02d} KST, 화~토)")
 
         except Exception as e:
             logger.error(f"스케줄러 시작 오류: {e}")

@@ -31,3 +31,4 @@ upstash-redis>=1.0.0
 # Financial Data
 yfinance>=0.2.0
 multitasking==0.0.9  # Pin for Python 3.8 compatibility
+lxml>=4.9.0  # yfinance earnings data parsing
